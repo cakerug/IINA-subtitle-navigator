@@ -28,6 +28,10 @@
     
     <button id="copySel">Copy Selected</button>
     <button id="clearSel">Clear</button>
+
+    <span class="spacer"></span>
+    <button id="save" disabled>Save</button>
+    <span id="dirtyBadge" class="dirtyBadge" hidden></span>
   </div>
 
   <div class="toolbar3">
@@ -42,10 +46,13 @@
     </div>
   </div>
 
+  <div class="hint">Right-click a line to edit it. Enter saves the edit, Shift+Enter adds a newline, Escape cancels. ⌘S writes to the .srt file.</div>
+
   <div class="live" id="live" title="Click to seek to this line">
     <div class="liveLine" id="liveText"></div>
   </div>
 
+  <div id="notice" class="notice" hidden></div>
   <div id="meta" class="meta"></div>
   <div id="list" class="list"></div>
 

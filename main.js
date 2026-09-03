@@ -8,6 +8,16 @@ let trackId = null;
 let cues = [];
 let rows = [];
 
+// Raw source lines of the loaded .srt, kept so edits can be spliced into the
+// original text instead of re-serialized from the lossy parse. See docs/ARCHITECTURE.md.
+let srcLines = [];
+let srcPath = "";
+
+// cue id -> replacement text. Keyed to `editsKey` so switching files drops them.
+let edits = new Map();
+let editsKey = "";
+let backedUp = false;
+
 let lastStateKey = "";
 let timeTicker = null;
 let loop = { enabled: false, start: 0, end: 0 };
@@ -117,6 +127,9 @@ function parseTimeToSeconds(ts) {
   return h * 3600 + mi * 60 + se + ms / 1000;
 }
 
+// Returns every cue with a parseable timeline, tagged with the line span its text
+// occupies in `lines`. Unusable cues are kept (not dropped) so the spans of later
+// cues stay aligned with the source; `buildRows` does the display filtering.
 function parseSRT(content) {
   const lines = String(content).replace(/\r/g, "").split("\n");
   const out = [];
@@ -140,19 +153,33 @@ function parseSRT(content) {
     const end = parseTimeToSeconds(tm[2]);
     i++;
 
-    const textLines = [];
-    while (i < lines.length && lines[i].trim() !== "") {
-      textLines.push(lines[i]);
-      i++;
-    }
-    const text = stripCurly(textLines.join("\n"));
-    if (Number.isFinite(start) && Number.isFinite(end) && end > start && text) {
-      out.push({ start, end, text });
-    }
+    const textStart = i;
+    while (i < lines.length && lines[i].trim() !== "") i++;
+    const textEnd = i;
+
+    const text = stripCurly(lines.slice(textStart, textEnd).join("\n"));
+    out.push({ start, end, text, textStart, textEnd });
   }
 
-  out.sort((a,b)=>a.start-b.start);
-  return out;
+  return { lines, cues: out };
+}
+
+function buildRows() {
+  return cues
+    .map((c, id) => ({
+      id,
+      start: c.start,
+      end: c.end,
+      text: edits.has(id) ? edits.get(id) : c.text,
+      dirty: edits.has(id)
+    }))
+    .filter(r => Number.isFinite(r.start) && Number.isFinite(r.end) && r.end > r.start && r.text)
+    .sort((a, b) => a.start - b.start);
+}
+
+function postRows(meta) {
+  rows = buildRows();
+  post("setRows", { rows, meta: { count: rows.length, dirty: edits.size, ...(meta || {}) } });
 }
 
 function getSubDelay() {
@@ -178,7 +205,7 @@ function closestRowIndexByTime(t) {
   return (Math.abs(rows[lo].start - tAdj) < Math.abs(rows[lo-1].start - tAdj)) ? lo : (lo-1);
 }
 
-async function refresh(force=false) {
+async function refresh(force = false) {
   allSubTracks = await buildTrackListSuffixOnly();
 
   if (trackId === null) {
@@ -186,34 +213,128 @@ async function refresh(force=false) {
     trackId = selected ? selected.id : (allSubTracks[0]?.id ?? null);
   }
   if (trackId !== null && !allSubTracks.find(t => t.id === trackId)) {
-    trackId = allSubTracks[0]?.id ?? null;
+    // sub-reload renumbers tracks, so re-resolve by path before giving up on it.
+    const sameFile = srcPath ? allSubTracks.find(t => t.path === srcPath) : null;
+    trackId = sameFile ? sameFile.id : (allSubTracks[0]?.id ?? null);
   }
 
   post("setTracks", { tracks: allSubTracks, trackId });
 
   if (!trackId) {
-    rows = [];
+    cues = []; rows = []; srcLines = []; srcPath = "";
     post("setRows", { rows: [], meta: { error: "No external subtitle tracks with filename suffix found. Please load external subtitles in IINA." } });
     return;
   }
 
   const path = allSubTracks.find(t => t.id === trackId)?.path || "";
   const stateKey = `${trackId}|${path}`;
-  if (!force && stateKey === lastStateKey && rows.length) {
-    post("setRows", { rows, meta: { count: rows.length } });
+  if (!force && stateKey === lastStateKey && cues.length) {
+    postRows();
     return;
   }
   lastStateKey = stateKey;
 
+  if (editsKey !== path) {
+    edits.clear();
+    editsKey = path;
+    backedUp = false;
+  }
+
   try {
     if (!path.toLowerCase().endsWith(".srt")) throw new Error(`Selected subtitle is not .srt: ${path}`);
     const text = await readSubtitleTextById(trackId, path);
-    cues = parseSRT(text);
-    rows = cues.map(c => ({ start: c.start, end: c.end, text: c.text }));
-    post("setRows", { rows, meta: { count: rows.length } });
+    const parsed = parseSRT(text);
+    cues = parsed.cues;
+    srcLines = parsed.lines;
+    srcPath = path;
+    postRows({ path });
   } catch (e) {
-    rows = [];
+    cues = []; rows = []; srcLines = [];
     post("setRows", { rows: [], meta: { error: fmtErr(e) } });
+  }
+}
+
+/** Editing */
+
+function isBlank(text) {
+  return String(text ?? "").trim() === "";
+}
+
+// Splices edited text into the original source lines. Cues are applied back to
+// front so earlier splices don't shift the spans of ones not yet applied.
+function buildSRT() {
+  const out = srcLines.slice();
+  const ids = [...edits.keys()].sort((a, b) => cues[b].textStart - cues[a].textStart);
+  for (const id of ids) {
+    const c = cues[id];
+    if (!c) continue;
+    const replacement = String(edits.get(id)).replace(/\r/g, "").split("\n");
+    out.splice(c.textStart, c.textEnd - c.textStart, ...replacement);
+  }
+  let text = out.join("\n");
+  if (!text.endsWith("\n")) text += "\n";
+  return text;
+}
+
+async function backupOnce(path) {
+  if (backedUp) return;
+  // Keeps the first pristine copy even across sessions, rather than letting a later
+  // save overwrite the backup with already-edited text. Guarded with `test -e` rather
+  // than `cp -n` because BSD cp exits 1 when it skips an existing destination.
+  const bak = path + ".bak";
+  const res = await utils.exec("/bin/bash", ["-lc", `test -e ${shQuote(bak)} || cp ${shQuote(path)} ${shQuote(bak)}`]);
+  if (res && Number.isFinite(res.status) && res.status !== 0) {
+    throw new Error(`Backup failed: ${res.stderr || `exit ${res.status}`}`);
+  }
+  backedUp = true;
+}
+
+async function saveSubtitle() {
+  if (!edits.size) {
+    post("saveResult", { ok: true, saved: 0, message: "No changes to save" });
+    return;
+  }
+  const path = srcPath;
+  if (!path) {
+    post("saveResult", { ok: false, message: "No subtitle file loaded" });
+    return;
+  }
+
+  const count = edits.size;
+  try {
+    const check = await utils.exec("/bin/bash", ["-lc", `test -w ${shQuote(path)}`]);
+    if (check && Number.isFinite(check.status) && check.status !== 0) {
+      throw new Error(`File is not writable (moved, deleted, or read-only): ${path}`);
+    }
+
+    await backupOnce(path);
+
+    // file.write refuses to overwrite anything outside @tmp/@data, so stage the
+    // new text there and copy it over the original with the shell.
+    const staged = "@tmp/subtitle-navigator-save.srt";
+    file.write(staged, buildSRT());
+    const stagedReal = utils.resolvePath(staged);
+
+    // Redirect into the original path instead of mv, to keep its inode and permissions.
+    const res = await utils.exec("/bin/bash", ["-lc", `cat ${shQuote(stagedReal)} > ${shQuote(path)}`]);
+    if (res && Number.isFinite(res.status) && res.status !== 0) {
+      throw new Error(`Write failed: ${res.stderr || `exit ${res.status}`}`);
+    }
+
+    edits.clear();
+
+    try { mpv.command("sub-reload", [String(trackId)]); } catch (e) { log.error(fmtErr(e)); }
+
+    lastStateKey = "";
+    await refresh(true);
+
+    core.osd(`Saved ${count} subtitle edit${count === 1 ? "" : "s"}`);
+    post("saveResult", { ok: true, saved: count, message: `Saved ${count} edit${count === 1 ? "" : "s"}` });
+  } catch (e) {
+    const msg = fmtErr(e);
+    log.error(msg);
+    core.osd("Subtitle save failed");
+    post("saveResult", { ok: false, message: msg });
   }
 }
 
@@ -238,19 +359,25 @@ setInterval(() => {
     const idx = closestRowIndexByTime(t);
     if (idx < 0) return;
     const r = rows[idx];
-    const key = `${idx}|${r.start}|${r.end}`;
+    const key = `${idx}|${r.start}|${r.end}|${r.text}`;
     if (key === lastLiveKey) return;
     lastLiveKey = key;
     post("liveSubtitle", { text: r.text, start: r.start, idx });
   } catch (_) {}
 }, 200);
 
-standaloneWindow.onMessage("windowClosed", () => { uiReady = false; windowLoaded = false; });
+standaloneWindow.onMessage("windowClosed", () => {
+  uiReady = false;
+  windowLoaded = false;
+  // Edits live here, not in the webview, so closing the window only hides them.
+  if (edits.size) core.osd(`Subtitle Navigator: ${edits.size} unsaved edit${edits.size === 1 ? "" : "s"} kept`);
+});
 
 standaloneWindow.onMessage("uiReady", () => {
   uiReady = true;
   startTicker();
-  refresh(true);
+  // Not forced: keeps unsaved edits when the window is reopened on the same file.
+  refresh(false);
 });
 
 standaloneWindow.onMessage("setSelection", (data) => {
@@ -300,8 +427,33 @@ standaloneWindow.onMessage("loopLine", (data) => {
   }
 });
 
+standaloneWindow.onMessage("editRow", (data) => {
+  const id = Number(data?.id);
+  const text = String(data?.text ?? "");
+  if (!Number.isInteger(id) || !cues[id]) return;
+  if (isBlank(text)) {
+    post("notice", { ok: false, message: "Subtitle text cannot be empty" });
+    postRows();
+    return;
+  }
+  const next = text.replace(/\r/g, "").replace(/\n{2,}/g, "\n").trim();
+  if (next === cues[id].text) edits.delete(id);
+  else edits.set(id, next);
+  postRows();
+});
+
+standaloneWindow.onMessage("revertRow", (data) => {
+  const id = Number(data?.id);
+  if (!Number.isInteger(id)) return;
+  edits.delete(id);
+  postRows();
+});
+
+standaloneWindow.onMessage("save", () => { saveSubtitle(); });
+
 standaloneWindow.onMessage("reload", () => {
   lastStateKey = "";
+  edits.clear();
   refresh(true);
 });
 

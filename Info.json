@@ -1,12 +1,12 @@
 {
   "name": "Subtitle Navigator",
   "identifier": "info.junjie-chen.subtitle-navigator",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "author": {
     "name": "GPT 5.2 & Junjie Chen",
     "url": "https://junjie-chen.info"
   },
-  "description": "Subtitle Navigator (standalone window).",
+  "description": "Subtitle Navigator (standalone window). Browse, search, loop and edit subtitles.",
   "entry": "main.js",
   "permissions": [
     "file-system",

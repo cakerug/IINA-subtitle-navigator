@@ -3,13 +3,20 @@ let trackId = null;
 
 let rows = [];
 let filtered = [];
+// Row ids, not list positions, so selection survives re-renders and search changes.
 let selected = new Set();
-let lastClicked = null;
+let lastClickedPos = null;
 
 let currentTime = 0;
 let currentIdx = -1;
 
 let liveStart = null;
+
+let editingId = null;
+let dirtyCount = 0;
+let reloadArmedAt = 0;
+
+let noticeTimer = null;
 
 function fmt(t) {
   const s = Math.max(0, Math.floor(t));
@@ -17,6 +24,21 @@ function fmt(t) {
   const m = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
   const ss = String(s % 60).padStart(2, "0");
   return `${h}:${m}:${ss}`;
+}
+
+function showNotice(message, kind = "info") {
+  const el = document.getElementById("notice");
+  el.textContent = message;
+  el.className = `notice ${kind}`;
+  el.hidden = false;
+  if (noticeTimer) clearTimeout(noticeTimer);
+  if (kind !== "error") noticeTimer = setTimeout(() => { el.hidden = true; }, 4000);
+}
+
+function clearNotice() {
+  const el = document.getElementById("notice");
+  el.hidden = true;
+  if (noticeTimer) clearTimeout(noticeTimer);
 }
 
 function populateSelect() {
@@ -33,9 +55,8 @@ function populateSelect() {
 
 function applyFilter() {
   const q = document.getElementById("q").value.trim().toLowerCase();
-  selected.clear();
-  lastClicked = null;
   filtered = q ? rows.filter(r => (r.text || "").toLowerCase().includes(q)) : rows.slice();
+  lastClickedPos = null;
   render();
 }
 
@@ -52,41 +73,143 @@ function findCurrentIndex() {
   return best;
 }
 
+function updateDirtyUI() {
+  const btn = document.getElementById("save");
+  const badge = document.getElementById("dirtyBadge");
+  btn.disabled = dirtyCount === 0;
+  btn.textContent = dirtyCount ? `Save (${dirtyCount})` : "Save";
+  badge.hidden = dirtyCount === 0;
+  badge.textContent = dirtyCount ? `${dirtyCount} unsaved` : "";
+}
+
+function commitEdit(ta, id) {
+  if (ta.dataset.done) return false;
+  const value = ta.value;
+  if (value.trim() === "") {
+    showNotice("Subtitle text cannot be empty — press Escape to cancel instead.", "error");
+    ta.focus();
+    return false;
+  }
+  ta.dataset.done = "1";
+  editingId = null;
+
+  const next = value.replace(/\r/g, "").replace(/\n{2,}/g, "\n").trim();
+  const row = rows.find(r => r.id === id);
+  if (row) { row.text = next; row.dirty = true; }
+  iina.postMessage("editRow", { id, text: next });
+  render();
+  return true;
+}
+
+function cancelEdit(ta) {
+  ta.dataset.done = "1";
+  editingId = null;
+  render();
+}
+
+function startEdit(id) {
+  editingId = id;
+  clearNotice();
+  render();
+  const ta = document.querySelector(".editor");
+  if (ta) { ta.focus(); ta.select(); }
+}
+
+function buildEditor(r) {
+  const ta = document.createElement("textarea");
+  ta.className = "editor";
+  ta.value = r.text || "";
+  ta.rows = Math.min(6, (r.text || "").split("\n").length + 1);
+
+  ta.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEdit(ta, r.id); }
+    else if (e.key === "Escape") { e.preventDefault(); cancelEdit(ta); }
+    e.stopPropagation();
+  });
+  ta.addEventListener("blur", () => commitEdit(ta, r.id));
+  ta.addEventListener("mousedown", (e) => e.stopPropagation());
+  ta.addEventListener("click", (e) => e.stopPropagation());
+  ta.addEventListener("contextmenu", (e) => e.stopPropagation());
+  return ta;
+}
+
 function render() {
   const list = document.getElementById("list");
+
+  const stale = list.querySelector(".editor");
+  if (stale && Number(stale.closest(".item")?.dataset.id) !== editingId) stale.dataset.done = "1";
+
+  // Rebuilding the list would otherwise jump a long subtitle file back to the top
+  // every time an edit is committed.
+  const scrollTop = list.scrollTop;
   list.innerHTML = "";
   currentIdx = findCurrentIndex();
 
-  filtered.forEach((r, i) => {
+  filtered.forEach((r, pos) => {
     const item = document.createElement("div");
-    const isSel = selected.has(i);
-    const isCur = (i === currentIdx);
+    const isSel = selected.has(r.id);
+    const isCur = (pos === currentIdx);
+    const isEditing = (r.id === editingId);
 
-    item.className = "item" + (isSel ? " selected" : "") + (isCur ? " current" : "");
-    item.dataset.index = String(i);
-    item.innerHTML = `
-      <div class="time">${fmt(r.start)}</div>
-      <div class="line"></div>
-    `;
-    item.querySelector(".line").innerText = r.text || "";
+    item.className = "item"
+      + (isSel ? " selected" : "")
+      + (isCur ? " current" : "")
+      + (r.dirty ? " dirty" : "")
+      + (isEditing ? " editing" : "");
+    item.dataset.index = String(pos);
+    item.dataset.id = String(r.id);
+
+    const time = document.createElement("div");
+    time.className = "time";
+    time.textContent = fmt(r.start);
+    if (r.dirty) {
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      dot.title = "Unsaved edit";
+      time.appendChild(dot);
+
+      const revert = document.createElement("button");
+      revert.className = "revert";
+      revert.textContent = "Revert";
+      revert.addEventListener("click", (e) => {
+        e.stopPropagation();
+        iina.postMessage("revertRow", { id: r.id });
+      });
+      time.appendChild(revert);
+    }
+    item.appendChild(time);
+
+    if (isEditing) {
+      item.appendChild(buildEditor(r));
+    } else {
+      const line = document.createElement("div");
+      line.className = "line";
+      line.innerText = r.text || "";
+      item.appendChild(line);
+    }
+
+    item.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      if (editingId !== r.id) startEdit(r.id);
+    });
 
     item.addEventListener("click", (e) => {
-      const idx = i;
-      const isRange = e.shiftKey && lastClicked != null;
+      if (editingId === r.id) return;
+      const isRange = e.shiftKey && lastClickedPos != null;
       const isToggle = e.metaKey || e.ctrlKey;
 
       if (isRange) {
-        const a = Math.min(lastClicked, idx);
-        const b = Math.max(lastClicked, idx);
+        const a = Math.min(lastClickedPos, pos);
+        const b = Math.max(lastClickedPos, pos);
         selected.clear();
-        for (let k = a; k <= b; k++) selected.add(k);
+        for (let k = a; k <= b; k++) if (filtered[k]) selected.add(filtered[k].id);
       } else if (isToggle) {
-        if (selected.has(idx)) selected.delete(idx); else selected.add(idx);
-        lastClicked = idx;
+        if (selected.has(r.id)) selected.delete(r.id); else selected.add(r.id);
+        lastClickedPos = pos;
       } else {
         selected.clear();
-        selected.add(idx);
-        lastClicked = idx;
+        selected.add(r.id);
+        lastClickedPos = pos;
         iina.postMessage("seekTo", { time: r.start });
       }
 
@@ -97,6 +220,8 @@ function render() {
 
     list.appendChild(item);
   });
+
+  list.scrollTop = scrollTop;
 }
 
 async function copyText(text) {
@@ -111,12 +236,7 @@ async function copyText(text) {
 }
 
 function selectedRows() {
-  const out = [];
-  for (const idx of selected) {
-    const r = filtered[idx];
-    if (r) out.push(r);
-  }
-  return out.sort((a, b) => a.start - b.start);
+  return rows.filter(r => selected.has(r.id)).sort((a, b) => a.start - b.start);
 }
 
 function scrollToIndex(idx) {
@@ -124,9 +244,39 @@ function scrollToIndex(idx) {
   if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
+function requestSave() {
+  const ta = document.querySelector(".editor");
+  let justCommitted = false;
+  if (ta) {
+    const item = ta.closest(".item");
+    if (!item) return;
+    justCommitted = commitEdit(ta, Number(item.dataset.id));
+    if (!justCommitted) return; // blank text; commitEdit already explained why
+  }
+  if (!justCommitted && dirtyCount === 0) {
+    showNotice("No changes to save");
+    return;
+  }
+  iina.postMessage("save", {});
+}
+
 /** Toolbar actions */
 document.getElementById("q").addEventListener("input", applyFilter);
-document.getElementById("reload").addEventListener("click", () => iina.postMessage("reload", {}));
+
+// Reloading re-reads the file from disk and throws away unsaved edits, so when there
+// are any it takes a second click to confirm rather than a native dialog.
+document.getElementById("reload").addEventListener("click", () => {
+  if (dirtyCount > 0 && Date.now() - reloadArmedAt > 5000) {
+    reloadArmedAt = Date.now();
+    showNotice(`Reload discards ${dirtyCount} unsaved edit(s). Click Reload again to confirm.`, "error");
+    return;
+  }
+  reloadArmedAt = 0;
+  clearNotice();
+  iina.postMessage("reload", {});
+});
+
+document.getElementById("save").addEventListener("click", requestSave);
 
 document.getElementById("track").addEventListener("change", () => {
   trackId = Number(document.getElementById("track").value);
@@ -135,7 +285,7 @@ document.getElementById("track").addEventListener("change", () => {
 
 document.getElementById("clearSel").addEventListener("click", () => {
   selected.clear();
-  lastClicked = null;
+  lastClickedPos = null;
   render();
 });
 
@@ -181,6 +331,20 @@ document.getElementById("live").addEventListener("click", () => {
   if (typeof liveStart === "number") iina.postMessage("seekTo", { time: liveStart });
 });
 
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    requestSave();
+    return;
+  }
+  // Edit the line that is playing right now, without reaching for the mouse.
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && currentIdx >= 0) {
+    e.preventDefault();
+    const r = filtered[currentIdx];
+    if (r) startEdit(r.id);
+  }
+});
+
 /** Messages */
 iina.onMessage("setTracks", (data) => {
   tracks = Array.isArray(data?.tracks) ? data.tracks : [];
@@ -190,20 +354,25 @@ iina.onMessage("setTracks", (data) => {
 
 iina.onMessage("setRows", ({ rows: r, meta }) => {
   rows = Array.isArray(r) ? r : [];
-  filtered = rows.slice();
-  selected.clear();
-  lastClicked = null;
+  dirtyCount = Number(meta?.dirty) || 0;
+  updateDirtyUI();
+
+  const liveIds = new Set(rows.map(x => x.id));
+  for (const id of [...selected]) if (!liveIds.has(id)) selected.delete(id);
+  if (editingId != null && !liveIds.has(editingId)) editingId = null;
 
   const el = document.getElementById("meta");
   if (meta?.error) el.innerText = `Error: ${meta.error}`;
   else el.innerText = `Rows: ${meta?.count ?? rows.length}`;
 
-  render();
+  applyFilter();
 });
 
 iina.onMessage("time", ({ t }) => {
   if (typeof t === "number" && isFinite(t)) {
     currentTime = t;
+    // Re-rendering would tear down an open editor mid-typing.
+    if (editingId != null) return;
     const idx = findCurrentIndex();
 
     if (idx !== currentIdx) {
@@ -223,6 +392,14 @@ iina.onMessage("scrollToIndex", ({ idx }) => {
 iina.onMessage("liveSubtitle", (data) => {
   document.getElementById("liveText").innerText = data?.text || "";
   liveStart = (typeof data?.start === "number") ? data.start : null;
+});
+
+iina.onMessage("notice", (data) => {
+  showNotice(String(data?.message || ""), data?.ok ? "info" : "error");
+});
+
+iina.onMessage("saveResult", (data) => {
+  showNotice(String(data?.message || ""), data?.ok ? "ok" : "error");
 });
 
 iina.postMessage("uiReady", {});
