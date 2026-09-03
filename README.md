@@ -68,10 +68,10 @@ This project is intended to be:
 ---
 
 ### Editing | 字幕编辑
-- **Right-click a line to edit it inline**  
-  右键点击字幕行即可就地编辑
-- `Enter` commits, `Shift+Enter` adds a newline, `Escape` cancels  
-  `Enter` 确认，`Shift+Enter` 换行，`Escape` 取消
+- **Right-click a line for a context menu**: edit, revert, jump, loop, copy  
+  右键点击字幕行弹出菜单：编辑、撤销、跳转、循环、复制
+- While editing, `Enter` commits, `Shift+Enter` adds a newline, `Escape` cancels  
+  编辑时 `Enter` 确认，`Shift+Enter` 换行，`Escape` 取消
 - `Cmd+Enter` edits the line playing right now  
   `Cmd+Enter` 直接编辑当前播放行
 - **Unsaved edits are marked** with an amber dot and a per-line `Revert` button  
@@ -115,6 +115,19 @@ is preserved exactly as it was.
 
 插件启用后会**自动打开独立窗口**。
 
+### Build from source | 从源码构建
+
+```bash
+./scripts/build-plugin.sh          # release build -> dist/
+./scripts/build-plugin.sh --dev    # dev build, installs alongside the release
+```
+
+The `--dev` build gets its own plugin identifier, name and menu shortcut
+(`Cmd+Shift+D`), so IINA treats it as a separate plugin and you can enable it
+next to the released one to compare the two.
+
+`--dev` 构建使用独立的标识符、名称与快捷键，可与正式版同时启用，方便对比。
+
 ---
 
 ## 🚀 Usage | 使用说明
@@ -136,7 +149,7 @@ If you close the window:
 2. Open Subtitle Navigator
 3. Search unfamiliar lines
 4. Jump → loop → repeat
-5. Right-click to fix any mis-transcribed line, then `Cmd+S`
+5. Right-click → **Edit text** to fix any mis-transcribed line, then `Cmd+S`
 6. Copy useful sentences to notes / Anki
 
 ---

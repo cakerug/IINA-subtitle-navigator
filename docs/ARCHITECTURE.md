@@ -63,11 +63,26 @@ mpv's `sub-reload` unloads and re-adds the track, so the track id can change.
 `refresh()` re-resolves the track by `external-filename` before falling back to the
 first available track.
 
+### Running a dev build beside the release
+
+IINA keys plugins on `identifier`, so a build that keeps the released identifier
+replaces it rather than sitting next to it. `scripts/build-plugin.sh --dev`
+rewrites the identifier, the display name, and the menu shortcut in a staging copy
+before packing — the repo source is never modified.
+
+`PLUGIN_LABEL` and `MENU_SHORTCUT` in `main.js` exist for that rewrite: they keep
+the strings on single, stable lines so the script can target them exactly, and it
+aborts if a target is missing rather than shipping a half-patched plugin.
+
 ## Message inventory
 
 UI → main: `uiReady`, `windowClosed`, `setSelection`, `seekTo`, `seekNearest`,
 `seekCurrentLine`, `scrollToCurrent`, `loopLine`, `reload`, `copyFallback`
 — plus, added for editing: `editRow`, `revertRow`, `save`.
+
+The row context menu is drawn in the WebView rather than by AppKit: the UI has no
+menu API, and `contextmenu` is suppressed document-wide so WebKit's own menu
+(Reload, Save Page As…) never appears.
 
 Main → UI: `setTracks`, `setRows`, `time`, `scrollToIndex`, `liveSubtitle`
 — plus, added for editing: `saveResult`.
