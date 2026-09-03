@@ -67,6 +67,32 @@ This project is intended to be:
 
 ---
 
+### Editing | 字幕编辑
+- **Right-click a line to edit it inline**  
+  右键点击字幕行即可就地编辑
+- `Enter` commits, `Shift+Enter` adds a newline, `Escape` cancels  
+  `Enter` 确认，`Shift+Enter` 换行，`Escape` 取消
+- `Cmd+Enter` edits the line playing right now  
+  `Cmd+Enter` 直接编辑当前播放行
+- **Unsaved edits are marked** with an amber dot and a per-line `Revert` button  
+  未保存的修改会显示橙色圆点，并提供单行撤销按钮
+- **`Cmd+S` (or the Save button) writes back to the `.srt`**, then reloads the
+  subtitle track so the correction shows up in playback immediately  
+  `Cmd+S` 或保存按钮写回 `.srt` 文件，并重新加载字幕轨，修改立即生效
+- **A backup is made before the first write**: `yourfile.srt` → `yourfile.srt.bak`  
+  首次写入前会自动备份为 `yourfile.srt.bak`
+
+Only the lines you actually edit are rewritten. Everything else in the file —
+cue numbering, timestamp formatting, style tags, and any cues the parser skips —
+is preserved exactly as it was.
+
+只有被编辑的行会被改写，文件中的其他内容（序号、时间戳格式、样式标签等）保持原样。
+
+> Editing a line that contained `{...}` style tags drops those tags from that line,
+> because the editor works on the cleaned text the list displays.
+
+---
+
 ### Timing Accuracy | 时间精准度
 - Automatically compensates **mpv `sub-delay`**  
   字幕列表、跳转、循环与屏幕字幕同步
@@ -110,7 +136,8 @@ If you close the window:
 2. Open Subtitle Navigator
 3. Search unfamiliar lines
 4. Jump → loop → repeat
-5. Copy useful sentences to notes / Anki
+5. Right-click to fix any mis-transcribed line, then `Cmd+S`
+6. Copy useful sentences to notes / Anki
 
 ---
 
@@ -142,6 +169,9 @@ You are encouraged to:
 - Only `.srt` supported
 - Embedded subtitles not parsed as text
 - Single subtitle track by design
+- Editing changes subtitle **text** only — timestamps are not editable
+- Saving normalizes CRLF line endings to LF
+- Switching tracks or pressing **Reload** discards unsaved edits (Reload asks first)
 
 ---
 
