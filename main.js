@@ -1,5 +1,10 @@
 const { core, standaloneWindow, event, mpv, file, utils, console: log, menu } = iina;
 
+// Kept on their own lines as plain literals: scripts/build-plugin.sh rewrites them
+// for the dev build so it can run side by side with the released plugin.
+const PLUGIN_LABEL = "Subtitle Navigator";
+const MENU_SHORTCUT = "cmd+shift+s";
+
 let uiReady = false;
 
 let allSubTracks = [];
@@ -26,7 +31,7 @@ let windowLoaded = false;
 
 function ensureWindowLoaded() {
   if (windowLoaded) return;
-  standaloneWindow.setProperty({ title: "Subtitle Navigator", resizable: true });
+  standaloneWindow.setProperty({ title: PLUGIN_LABEL, resizable: true });
   standaloneWindow.loadFile("ui/window.html");
   standaloneWindow.setFrame(900, 720);
   windowLoaded = true;
@@ -39,7 +44,7 @@ function openWindow() {
 
 // Plugin menu item: reopen window after user closes it.
 try {
-  menu.addItem(menu.item("Show Subtitle Navigator", () => openWindow(), { keyBinding: "cmd+shift+s" }));
+  menu.addItem(menu.item(`Show ${PLUGIN_LABEL}`, () => openWindow(), { keyBinding: MENU_SHORTCUT }));
 } catch (e) { /* menu may be unavailable in some contexts */ }
 
 // Open once on plugin load.
@@ -370,7 +375,7 @@ standaloneWindow.onMessage("windowClosed", () => {
   uiReady = false;
   windowLoaded = false;
   // Edits live here, not in the webview, so closing the window only hides them.
-  if (edits.size) core.osd(`Subtitle Navigator: ${edits.size} unsaved edit${edits.size === 1 ? "" : "s"} kept`);
+  if (edits.size) core.osd(`${PLUGIN_LABEL}: ${edits.size} unsaved edit${edits.size === 1 ? "" : "s"} kept`);
 });
 
 standaloneWindow.onMessage("uiReady", () => {
