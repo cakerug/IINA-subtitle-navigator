@@ -107,6 +107,64 @@ function cancelEdit(ta) {
   render();
 }
 
+function isMenuOpen() {
+  return !document.getElementById("ctxMenu").hidden;
+}
+
+function closeContextMenu() {
+  const el = document.getElementById("ctxMenu");
+  el.hidden = true;
+  el.innerHTML = "";
+}
+
+function openContextMenu(x, y, r) {
+  const el = document.getElementById("ctxMenu");
+  el.innerHTML = "";
+
+  const add = (label, hint, fn, disabled) => {
+    const b = document.createElement("button");
+    b.className = "ctxItem";
+    b.disabled = Boolean(disabled);
+    const t = document.createElement("span");
+    t.textContent = label;
+    b.appendChild(t);
+    if (hint) {
+      const k = document.createElement("kbd");
+      k.textContent = hint;
+      b.appendChild(k);
+    }
+    b.addEventListener("click", (e) => { e.stopPropagation(); closeContextMenu(); fn(); });
+    el.appendChild(b);
+  };
+  const sep = () => {
+    const d = document.createElement("div");
+    d.className = "ctxSep";
+    el.appendChild(d);
+  };
+
+  add("Edit text", "⌘⏎", () => startEdit(r.id));
+  add("Revert to original", "", () => iina.postMessage("revertRow", { id: r.id }), !r.dirty);
+  sep();
+  add("Jump to this line", "", () => iina.postMessage("seekTo", { time: r.start }));
+  add("Loop this line", "", () => {
+    document.getElementById("loopToggle").checked = true;
+    iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
+  });
+  sep();
+  add("Copy text", "", () => copyText(r.text || ""));
+  add("Copy with timestamp", "", () => copyText(`[${fmt(r.start)}] ${r.text || ""}`));
+
+  // Measured off-screen first so the menu can be flipped back inside the viewport.
+  el.hidden = false;
+  el.style.left = "0px";
+  el.style.top = "0px";
+  const rect = el.getBoundingClientRect();
+  const left = Math.max(4, Math.min(x, window.innerWidth - rect.width - 4));
+  const top = Math.max(4, Math.min(y, window.innerHeight - rect.height - 4));
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+}
+
 function startEdit(id) {
   editingId = id;
   clearNotice();
@@ -142,6 +200,7 @@ function render() {
   // Rebuilding the list would otherwise jump a long subtitle file back to the top
   // every time an edit is committed.
   const scrollTop = list.scrollTop;
+  closeContextMenu();
   list.innerHTML = "";
   currentIdx = findCurrentIndex();
 
@@ -190,7 +249,9 @@ function render() {
 
     item.addEventListener("contextmenu", (e) => {
       e.preventDefault();
-      if (editingId !== r.id) startEdit(r.id);
+      e.stopPropagation();
+      if (editingId === r.id) return;
+      openContextMenu(e.clientX, e.clientY, r);
     });
 
     item.addEventListener("click", (e) => {
@@ -331,7 +392,16 @@ document.getElementById("live").addEventListener("click", () => {
   if (typeof liveStart === "number") iina.postMessage("seekTo", { time: liveStart });
 });
 
+document.addEventListener("mousedown", (e) => {
+  if (!e.target.closest("#ctxMenu")) closeContextMenu();
+});
+document.getElementById("list").addEventListener("scroll", closeContextMenu);
+window.addEventListener("blur", closeContextMenu);
+// Right-clicking outside a row should dismiss rather than show WebKit's own menu.
+document.addEventListener("contextmenu", (e) => { e.preventDefault(); closeContextMenu(); });
+
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeContextMenu();
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
     e.preventDefault();
     requestSave();
@@ -371,8 +441,9 @@ iina.onMessage("setRows", ({ rows: r, meta }) => {
 iina.onMessage("time", ({ t }) => {
   if (typeof t === "number" && isFinite(t)) {
     currentTime = t;
-    // Re-rendering would tear down an open editor mid-typing.
-    if (editingId != null) return;
+    // Re-rendering would tear down an open editor mid-typing, or yank the context
+    // menu out from under the pointer as playback advances.
+    if (editingId != null || isMenuOpen()) return;
     const idx = findCurrentIndex();
 
     if (idx !== currentIdx) {

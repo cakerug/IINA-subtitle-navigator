@@ -267,3 +267,54 @@ button {
         color: #ffb454;
     }
 }
+
+/* --- 右键菜单 --- */
+.ctxMenu {
+    position: fixed;
+    z-index: 100;
+    min-width: 210px;
+    padding: 4px;
+    border-radius: 8px;
+    border: 1px solid rgba(127, 127, 127, 0.3);
+    background: Canvas;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.28);
+}
+
+.ctxItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: 5px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.ctxItem:hover:not(:disabled) {
+    background: #007aff;
+    color: #fff;
+}
+
+.ctxItem:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.ctxItem kbd {
+    font: inherit;
+    font-size: 11px;
+    opacity: 0.6;
+}
+
+.ctxSep {
+    height: 1px;
+    margin: 4px 6px;
+    background: rgba(127, 127, 127, 0.28);
+}
