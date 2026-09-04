@@ -303,17 +303,6 @@ function scrollToIndex(idx) {
   if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
-// Saving happens on its own; this only skips the wait.
-function requestSave() {
-  const ta = document.querySelector(".editor");
-  if (ta) {
-    const item = ta.closest(".item");
-    if (!item) return;
-    if (!commitEdit(ta, Number(item.dataset.id))) return; // blank; commitEdit said why
-  }
-  iina.postMessage("save", {});
-}
-
 /** Toolbar actions */
 document.getElementById("q").addEventListener("input", applyFilter);
 
@@ -385,11 +374,6 @@ document.addEventListener("contextmenu", (e) => { e.preventDefault(); closeConte
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeContextMenu();
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
-    e.preventDefault();
-    requestSave();
-    return;
-  }
   // Edit the line that is playing right now, without reaching for the mouse.
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && currentIdx >= 0) {
     e.preventDefault();

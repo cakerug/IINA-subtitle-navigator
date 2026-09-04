@@ -56,8 +56,9 @@ text, so editing a cue that had `{...}` tags drops them from that cue only.
 
 There is no dirty state in the UI. An edit updates the list immediately and arms a
 ~2s timer, reset by each further edit, so a correction pass costs one write and one
-`sub-reload` instead of one per line. `Cmd+S` only skips the wait; a save arriving
-while one is in flight is queued rather than run concurrently. Anything that swaps
+`sub-reload` instead of one per line. There is no manual save at all; a save
+arriving while one is in flight is queued rather than run concurrently. Anything
+that swaps
 the loaded file out — track switch, Reload, a new video, closing the window —
 flushes a pending edit first, so the debounce window cannot swallow one.
 
@@ -114,7 +115,7 @@ aborts if a target is missing rather than shipping a half-patched plugin.
 
 UI → main: `uiReady`, `windowClosed`, `setSelection`, `seekTo`, `seekNearest`,
 `seekCurrentLine`, `scrollToCurrent`, `loopLine`, `reload`, `copyFallback`
-— plus, added for editing: `editRow`, `revertRow`, `save`.
+— plus, added for editing: `editRow`, `revertRow`.
 
 The row context menu is drawn in the WebView rather than by AppKit: the UI has no
 menu API, and `contextmenu` is suppressed document-wide so WebKit's own menu

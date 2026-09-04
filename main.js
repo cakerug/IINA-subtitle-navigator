@@ -532,9 +532,6 @@ standaloneWindow.onMessage("revertRow", (data) => {
   scheduleAutosave();
 });
 
-// Cmd+S just skips the debounce; there is no unsaved state for it to resolve.
-standaloneWindow.onMessage("save", () => { saveSubtitle(); });
-
 standaloneWindow.onMessage("reload", async () => {
   await flushPending();
   lastStateKey = "";

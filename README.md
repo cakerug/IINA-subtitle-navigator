@@ -74,8 +74,6 @@ This project is intended to be:
   编辑时 `Enter` 确认，`Shift+Enter` 换行，`Escape` 取消
 - `Cmd+Enter` edits the line playing right now  
   `Cmd+Enter` 直接编辑当前播放行
-- `Cmd+S` skips the wait and writes straight away  
-  `Cmd+S` 可跳过等待立即写入
 - **Saving is invisible.** There is no dirty marker and no Save step: an edit is
   written to the `.srt` shortly after you stop typing, and the subtitle track
   reloads so the fix shows up in playback  
