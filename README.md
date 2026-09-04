@@ -62,7 +62,8 @@ This project is intended to be:
 - **Loop a line** from the right-click menu, until you stop it there  
   右键菜单开启单句循环，再次右键该行可停止
 - **Search subtitles**
-- **Multi-select & copy**
+- **Multi-select**, then right-click the selection to copy every line at once  
+  多选后右键可一次性复制所选各行
 
 ---
 

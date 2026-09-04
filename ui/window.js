@@ -151,8 +151,12 @@ function openContextMenu(x, y, r) {
     });
   }
   sep();
-  add("Copy text", "", () => copyText(r.text || ""));
-  add("Copy with timestamp", "", () => copyText(`[${fmt(r.start)}] ${r.text || ""}`));
+  const batch = selected.has(r.id) && selected.size > 1 ? selectedRows() : [r];
+  const suffix = batch.length > 1 ? ` (${batch.length} lines)` : "";
+  const join = (parts) => parts.filter(Boolean).join("\n\n");
+  add(`Copy text${suffix}`, "", () => copyText(join(batch.map(x => x.text || ""))));
+  add(`Copy with timestamp${suffix}`, "", () =>
+    copyText(join(batch.map(x => `[${fmt(x.start)}] ${x.text || ""}`))));
 
   // Measured off-screen first so the menu can be flipped back inside the viewport.
   el.hidden = false;
@@ -328,11 +332,6 @@ document.getElementById("reload").addEventListener("click", () => {
 document.getElementById("track").addEventListener("change", () => {
   trackId = Number(document.getElementById("track").value);
   iina.postMessage("setSelection", { trackId });
-});
-
-document.getElementById("copySel").addEventListener("click", async () => {
-  const parts = selectedRows().map(r => r.text || "").filter(Boolean);
-  await copyText(parts.join("\n\n"));
 });
 
 // 手动切换自动滚动开关时的逻辑
