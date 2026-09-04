@@ -173,11 +173,14 @@ function startEdit(id) {
   if (ta) { ta.focus(); ta.select(); }
 }
 
-function buildEditor(r) {
+function buildEditor(r, carry) {
   const ta = document.createElement("textarea");
   ta.className = "editor";
-  ta.value = r.text || "";
-  ta.rows = Math.min(6, (r.text || "").split("\n").length + 1);
+  // `carry` is the in-flight text of an editor this render is replacing. Seeding from
+  // r.text instead would discard whatever was typed since the row was last posted.
+  const seed = carry ? carry.value : (r.text || "");
+  ta.value = seed;
+  ta.rows = Math.min(6, seed.split("\n").length + 1);
 
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEdit(ta, r.id); }
@@ -194,8 +197,22 @@ function buildEditor(r) {
 function render() {
   const list = document.getElementById("list");
 
-  const stale = list.querySelector(".editor");
-  if (stale && Number(stale.closest(".item")?.dataset.id) !== editingId) stale.dataset.done = "1";
+  // An editor being rebuilt for the same row keeps its text, caret and focus; one
+  // whose row is going away is marked done so its teardown blur cannot re-commit.
+  const open = list.querySelector(".editor");
+  let carry = null;
+  if (open) {
+    if (Number(open.closest(".item")?.dataset.id) === editingId) {
+      carry = {
+        value: open.value,
+        selStart: open.selectionStart,
+        selEnd: open.selectionEnd,
+        focused: document.activeElement === open,
+      };
+    } else {
+      open.dataset.done = "1";
+    }
+  }
 
   // Rebuilding the list would otherwise jump a long subtitle file back to the top
   // every time an edit is committed.
@@ -239,7 +256,7 @@ function render() {
     item.appendChild(time);
 
     if (isEditing) {
-      item.appendChild(buildEditor(r));
+      item.appendChild(buildEditor(r, carry));
     } else {
       const line = document.createElement("div");
       line.className = "line";
@@ -283,6 +300,14 @@ function render() {
   });
 
   list.scrollTop = scrollTop;
+
+  if (carry) {
+    const ta = list.querySelector(".editor");
+    if (ta && carry.focused) {
+      ta.focus();
+      ta.setSelectionRange(carry.selStart, carry.selEnd);
+    }
+  }
 }
 
 async function copyText(text) {
