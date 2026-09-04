@@ -15,6 +15,16 @@ let currentIdx = -1;
 
 let editingId = null;
 
+// Every occurrence of the query, in list order, and which one Replace will act on.
+// Rebuilt whenever the query or the rows change.
+let matches = [];
+let matchIdx = -1;
+let matchQuery = null;
+// Set by a replace: where to put the cursor once the matches are rebuilt. Landing
+// past the inserted text keeps a replacement that contains the query (world ->
+// the world) from parking the cursor back on the match it just made.
+let resumeAt = null;
+
 let noticeTimer = null;
 
 function fmt(t) {
@@ -52,10 +62,51 @@ function populateSelect() {
   if (trackId != null) sel.value = String(trackId);
 }
 
+function normalizeText(value) {
+  return String(value ?? "").replace(/\r/g, "").replace(/\n{2,}/g, "\n").trim();
+}
+
+// The query is matched as a literal, so the escaped `gi` regex is exactly the
+// case-insensitive substring test the filter runs — highlighting and replacing can
+// never disagree with what the list decided to show. A fresh regex per call keeps
+// `lastIndex` from leaking between uses.
+function searchRegex() {
+  const q = document.getElementById("q").value.trim();
+  if (!q) return null;
+  return new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+}
+
+function computeMatches() {
+  const re = searchRegex();
+  const key = re ? re.source : null;
+
+  matches = [];
+  if (re) {
+    for (const r of filtered) {
+      for (const m of String(r.text || "").matchAll(searchRegex())) {
+        matches.push({ id: r.id, time: r.start, start: m.index, end: m.index + m[0].length });
+      }
+    }
+  }
+
+  if (!matches.length) matchIdx = -1;
+  else if (resumeAt) {
+    const i = matches.findIndex(m =>
+      m.time > resumeAt.time || (m.time === resumeAt.time && m.start >= resumeAt.offset));
+    matchIdx = i >= 0 ? i : 0;
+  }
+  else if (key !== matchQuery || matchIdx < 0 || matchIdx >= matches.length) matchIdx = 0;
+
+  resumeAt = null;
+  matchQuery = key;
+  updateFindState();
+}
+
 function applyFilter() {
   const q = document.getElementById("q").value.trim().toLowerCase();
   filtered = q ? rows.filter(r => (r.text || "").toLowerCase().includes(q)) : rows.slice();
   lastClickedPos = null;
+  computeMatches();
   render();
 }
 
@@ -83,7 +134,7 @@ function commitEdit(ta, id) {
   ta.dataset.done = "1";
   editingId = null;
 
-  const next = value.replace(/\r/g, "").replace(/\n{2,}/g, "\n").trim();
+  const next = normalizeText(value);
   const row = rows.find(r => r.id === id);
   if (row) { row.text = next; row.dirty = true; }
   iina.postMessage("editRow", { id, text: next });
@@ -196,6 +247,26 @@ function buildEditor(r, carry) {
   return ta;
 }
 
+// Marks every occurrence of the query, and the one Replace will act on. Built from
+// text nodes rather than innerHTML so subtitle text carrying < or & cannot become
+// markup.
+function fillLine(el, text, rowId) {
+  const re = searchRegex();
+  if (!re) { el.textContent = text; return; }
+  const active = matches[matchIdx];
+
+  let last = 0;
+  for (const m of text.matchAll(re)) {
+    if (m.index > last) el.appendChild(document.createTextNode(text.slice(last, m.index)));
+    const mark = document.createElement("mark");
+    mark.textContent = m[0];
+    if (active && active.id === rowId && active.start === m.index) mark.className = "active";
+    el.appendChild(mark);
+    last = m.index + m[0].length;
+  }
+  el.appendChild(document.createTextNode(text.slice(last)));
+}
+
 function render() {
   const list = document.getElementById("list");
 
@@ -247,7 +318,7 @@ function render() {
     } else {
       const line = document.createElement("div");
       line.className = "line";
-      line.innerText = r.text || "";
+      fillLine(line, r.text || "", r.id);
       item.appendChild(line);
     }
 
@@ -314,6 +385,55 @@ function selectedRows() {
   return rows.filter(r => selected.has(r.id)).sort((a, b) => a.start - b.start);
 }
 
+function updateFindState() {
+  const has = matches.length > 0;
+  document.getElementById("matchCount").textContent =
+    !searchRegex() ? "" : (has ? `${matchIdx + 1} of ${matches.length}` : "No results");
+  for (const id of ["prevMatch", "nextMatch", "replaceOne"]) {
+    document.getElementById(id).disabled = !has;
+  }
+}
+
+function gotoMatch(delta) {
+  if (!matches.length) return;
+  matchIdx = (matchIdx + delta + matches.length) % matches.length;
+  updateFindState();
+  render();
+  scrollToMatch();
+}
+
+function scrollToMatch() {
+  const el = document.querySelector("mark.active");
+  if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+// One match at a time, deliberately: there is no undo, so every replacement is a
+// change the user has just looked at in the list.
+function replaceCurrent() {
+  const m = matches[matchIdx];
+  if (!m) return;
+  const row = rows.find(r => r.id === m.id);
+  if (!row) return;
+
+  const text = row.text || "";
+  const next = normalizeText(text.slice(0, m.start) + document.getElementById("replaceWith").value + text.slice(m.end));
+  // Replacing a match with itself would otherwise leave the cursor where it was and
+  // make the button look dead.
+  if (next === text) { gotoMatch(1); return; }
+  if (next === "") {
+    showNotice("That replacement would leave the line empty. Edit the line instead.", "error");
+    return;
+  }
+
+  row.text = next;
+  row.dirty = true;
+  iina.postMessage("editRow", { id: m.id, text: next });
+
+  resumeAt = { time: m.time, offset: m.start + document.getElementById("replaceWith").value.length };
+  applyFilter();
+  scrollToMatch();
+}
+
 function scrollToIndex(idx) {
   const el = document.querySelector(`.item[data-index="${idx}"]`);
   if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -321,6 +441,33 @@ function scrollToIndex(idx) {
 
 /** Toolbar actions */
 document.getElementById("q").addEventListener("input", applyFilter);
+
+function setReplaceOpen(open) {
+  document.getElementById("replaceRow").hidden = !open;
+  document.getElementById("toggleReplace").setAttribute("aria-expanded", String(open));
+  if (open) document.getElementById("replaceWith").focus();
+}
+
+document.getElementById("toggleReplace").addEventListener("click", () => {
+  setReplaceOpen(document.getElementById("replaceRow").hidden);
+});
+
+document.getElementById("prevMatch").addEventListener("click", () => gotoMatch(-1));
+document.getElementById("nextMatch").addEventListener("click", () => gotoMatch(1));
+document.getElementById("replaceOne").addEventListener("click", replaceCurrent);
+
+function isPlainEnter(e) {
+  return e.key === "Enter" && !e.metaKey && !e.ctrlKey;
+}
+
+document.getElementById("q").addEventListener("keydown", (e) => {
+  if (isPlainEnter(e)) { e.preventDefault(); gotoMatch(e.shiftKey ? -1 : 1); }
+});
+
+document.getElementById("replaceWith").addEventListener("keydown", (e) => {
+  if (isPlainEnter(e)) { e.preventDefault(); replaceCurrent(); }
+  else if (e.key === "Escape") { e.preventDefault(); setReplaceOpen(false); document.getElementById("q").focus(); }
+});
 
 document.getElementById("reload").addEventListener("click", () => {
   clearNotice();

@@ -2,6 +2,12 @@
     color-scheme: light dark;
 }
 
+/* An author `display` beats the UA rule for [hidden] no matter the specificity, so
+   any flex row that gets toggled needs this to actually disappear. */
+[hidden] {
+    display: none !important;
+}
+
 /* --- 布局核心 (Flexbox) --- */
 html,
 body {
@@ -43,6 +49,74 @@ body {
 .toolbar .grow {
     flex: 1;
     min-width: 220px;
+}
+
+/* --- 查找/替换控件 --- */
+.find {
+    display: flex;
+    align-items: stretch;
+    gap: 4px;
+    margin-top: 8px;
+    flex-shrink: 0;
+}
+
+/* Spans both rows, so it reads as the handle for the whole widget. */
+.findToggle {
+    width: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 5px;
+    background: none;
+    color: inherit;
+    opacity: 0.85;
+    font-size: 19px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.findToggle:hover {
+    background: rgba(127, 127, 127, 0.18);
+    opacity: 1;
+}
+
+.findToggle .chev {
+    display: inline-block;
+    transition: transform 0.12s;
+}
+
+.findToggle[aria-expanded="true"] .chev {
+    transform: rotate(90deg);
+}
+
+.findRows {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.findRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.findRow input {
+    flex: 1;
+    min-width: 0;
+}
+
+.findCount {
+    font-size: 12px;
+    opacity: 0.75;
+    white-space: nowrap;
+}
+
+.iconBtn {
+    width: 30px;
+    padding: 6px 0;
+    text-align: center;
 }
 
 .lbl {
@@ -154,6 +228,27 @@ button {
 .line {
     white-space: pre-wrap;
     line-height: 1.35;
+}
+
+mark {
+    background: rgba(255, 214, 10, 0.45);
+    color: inherit;
+    border-radius: 3px;
+    padding: 0 1px;
+}
+
+/* The one match Replace will act on. Its own colours in both themes, because it has
+   to stay legible over the blue of the currently playing row. */
+mark.active {
+    background: #ff9500;
+    color: #000;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+    mark {
+        background: rgba(255, 214, 10, 0.3);
+    }
 }
 /* --- 编辑功能样式 --- */
 .hint {

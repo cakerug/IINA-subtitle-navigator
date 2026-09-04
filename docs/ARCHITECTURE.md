@@ -107,6 +107,30 @@ before packing — the repo source is never modified.
 the strings on single, stable lines so the script can target them exactly, and it
 aborts if a target is missing rather than shipping a half-patched plugin.
 
+### Search, highlighting and replace
+
+The filter is a case-insensitive substring test. Highlighting and replace both work
+off `searchRegex()`, the query escaped into a `gi` regex, which matches exactly the
+same spans the filter tested — so the marks can never disagree with why a row is in
+the list. Marked lines are assembled from text nodes and `<mark>` elements rather
+than `innerHTML`, so subtitle text containing `<` or `&` cannot become markup.
+
+`matches` is a flat list of every occurrence in list order, rebuilt by
+`computeMatches()` on any change to the query or the rows; `matchIdx` names the one
+`mark.active` colours and Replace acts on. There is deliberately no Replace All: the
+only undo is the `.bak` copy of the whole file, so each replacement is one the user
+has just seen highlighted. A replacement that would empty a cue is refused rather
+than sent, since `editRow` rejects blank text — the list must never show text the
+file will not have.
+
+After a replacement `resumeAt` records the position just past the inserted text, and
+`computeMatches()` lands `matchIdx` on the first match at or after it. Without that,
+replacing `world` with `the world` would leave the cursor sitting on the match it had
+just created.
+
+Nothing about replace reaches `main.js`: a replacement is an ordinary `editRow`, so
+it inherits the same debounced write, rollback and re-render as a hand edit.
+
 ## Message inventory
 
 UI → main: `uiReady`, `windowClosed`, `setSelection`, `seekTo`,

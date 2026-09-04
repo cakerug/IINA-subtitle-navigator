@@ -12,10 +12,25 @@
       <label class="lbl">Subtitle</label>
       <select id="track"></select>
     </div>
-    <div class="row grow">
-      <input id="q" placeholder="Search..." />
-    </div>
     <button id="reload">Reload</button>
+  </div>
+
+  <div class="find">
+    <button id="toggleReplace" class="findToggle" title="Toggle Replace" aria-expanded="false">
+      <span class="chev">&#8250;</span>
+    </button>
+    <div class="findRows">
+      <div class="findRow">
+        <input id="q" placeholder="Search..." />
+        <span id="matchCount" class="findCount"></span>
+        <button id="prevMatch" class="iconBtn" title="Previous match (Shift+Enter)" disabled>&#8593;</button>
+        <button id="nextMatch" class="iconBtn" title="Next match (Enter)" disabled>&#8595;</button>
+      </div>
+      <div class="findRow" id="replaceRow" hidden>
+        <input id="replaceWith" placeholder="Replace with..." />
+        <button id="replaceOne" title="Replace this match (Enter)" disabled>Replace</button>
+      </div>
+    </div>
   </div>
 
   <div class="toolbar2">
