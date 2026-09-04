@@ -74,16 +74,21 @@ This project is intended to be:
   编辑时 `Enter` 确认，`Shift+Enter` 换行，`Escape` 取消
 - `Cmd+Enter` edits the line playing right now  
   `Cmd+Enter` 直接编辑当前播放行
-- **Unsaved edits are marked** with an amber dot and a per-line `Revert` button  
-  未保存的修改会显示橙色圆点，并提供单行撤销按钮
-- **Auto-save**: edits are written to the `.srt` about 2 seconds after you stop
-  typing, then the subtitle track reloads so the fix shows up in playback  
-  自动保存：停止输入约 2 秒后写回 `.srt`，并重新加载字幕轨
-- A run of edits batches into **one** write and **one** reload, rather than paying
-  both per line  
+- `Cmd+S` skips the wait and writes straight away  
+  `Cmd+S` 可跳过等待立即写入
+- **Saving is invisible.** There is no dirty marker and no Save step: an edit is
+  written to the `.srt` shortly after you stop typing, and the subtitle track
+  reloads so the fix shows up in playback  
+  无需手动保存，也没有“未保存”状态：停止输入后自动写回 `.srt` 并重载字幕轨
+- A run of edits batches into **one** write and **one** reload  
   连续编辑会合并为一次写入与一次重载
-- `Cmd+S` saves immediately; untick **Auto-save** to save only on demand  
-  `Cmd+S` 立即保存；取消勾选 **Auto-save** 则仅手动保存
+- **If a save fails, the line reverts** to what the file actually contains, and the
+  discarded text is shown so you can type it back in — the list never claims an
+  edit the `.srt` does not have  
+  保存失败时该行会回退到文件中的实际内容，并显示被放弃的文本
+- **Revert to original** in the context menu restores the text the file had when it
+  was loaded, even after edits have been saved  
+  右键菜单中的 **Revert to original** 可恢复加载时的原始文本
 - **A backup is made before the first write**: `yourfile.srt` → `yourfile.srt.bak`,
   and it keeps the pristine original even across sessions  
   首次写入前会自动备份为 `yourfile.srt.bak`，且始终保留最初的原始版本
@@ -157,7 +162,7 @@ If you close the window:
 2. Open Subtitle Navigator
 3. Search unfamiliar lines
 4. Jump → loop → repeat
-5. Right-click → **Edit text** to fix any mis-transcribed line, then `Cmd+S`
+5. Right-click → **Edit text** to fix any mis-transcribed line; it saves itself
 6. Copy useful sentences to notes / Anki
 
 ---
@@ -192,8 +197,8 @@ You are encouraged to:
 - Single subtitle track by design
 - Editing changes subtitle **text** only — timestamps are not editable
 - Saving normalizes CRLF line endings to LF
-- Switching tracks or pressing **Reload** discards unsaved edits (Reload asks first)
-- With auto-save on, **Revert** only helps within the ~2s window before the write
+- Edits are written without confirmation; the `.srt.bak` backup is the undo of
+  last resort, and it holds the original file rather than the previous save
 
 ---
 

@@ -52,12 +52,24 @@ ordering, and unparsed junk all survive.
 The one deliberate lossy edge: an edited cue is written back from the `stripCurly()`ed
 text, so editing a cue that had `{...}` tags drops them from that cue only.
 
-### Saving is debounced, and re-parses in memory
+### Saving is invisible, and a failure rolls back
 
-Edits arm a ~2s timer that is reset by each further edit, so a correction pass
-costs one write and one `sub-reload` instead of one per line. `Cmd+S` cancels the
-timer and writes immediately; a save that arrives while one is in flight is
-queued rather than run concurrently.
+There is no dirty state in the UI. An edit updates the list immediately and arms a
+~2s timer, reset by each further edit, so a correction pass costs one write and one
+`sub-reload` instead of one per line. `Cmd+S` only skips the wait; a save arriving
+while one is in flight is queued rather than run concurrently. Anything that swaps
+the loaded file out — track switch, Reload, a new video, closing the window —
+flushes a pending edit first, so the debounce window cannot swallow one.
+
+Because nothing signals "unsaved", the list must never show text the file does not
+have. A failed write therefore discards the whole batch and re-posts the rows,
+dropping the list back to the last saved text, and hands the discarded strings to
+the UI so a correction that mattered can be typed in again. That trades a rare lost
+edit for never lying about what is on disk.
+
+`originalTexts` keeps each cue's text as first parsed, because saving replaces
+`cues[].text` with the edited version; without it "Revert to original" would only
+reach as far back as the last save.
 
 After a successful write the plugin re-parses the text it just produced instead of
 reading the file back. Line-count changes shift every later cue's span, so spans
@@ -102,14 +114,14 @@ aborts if a target is missing rather than shipping a half-patched plugin.
 
 UI → main: `uiReady`, `windowClosed`, `setSelection`, `seekTo`, `seekNearest`,
 `seekCurrentLine`, `scrollToCurrent`, `loopLine`, `reload`, `copyFallback`
-— plus, added for editing: `editRow`, `revertRow`, `save`, `setAutosave`.
+— plus, added for editing: `editRow`, `revertRow`, `save`.
 
 The row context menu is drawn in the WebView rather than by AppKit: the UI has no
 menu API, and `contextmenu` is suppressed document-wide so WebKit's own menu
 (Reload, Save Page As…) never appears.
 
 Main → UI: `setTracks`, `setRows`, `time`, `scrollToIndex`, `liveSubtitle`
-— plus, added for editing: `saveResult`, `saveState`, `notice`.
+— plus, added for editing: `saveResult` (failures only), `notice`.
 
 `render()` carries an open editor's text, caret and focus across a rebuild. Without
 that, any `setRows` arriving mid-typing (which autosave makes routine) would reseed
