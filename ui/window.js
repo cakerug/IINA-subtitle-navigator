@@ -316,12 +316,6 @@ document.getElementById("track").addEventListener("change", () => {
   iina.postMessage("setSelection", { trackId });
 });
 
-document.getElementById("clearSel").addEventListener("click", () => {
-  selected.clear();
-  lastClickedPos = null;
-  render();
-});
-
 document.getElementById("copySel").addEventListener("click", async () => {
   const parts = selectedRows().map(r => r.text || "").filter(Boolean);
   await copyText(parts.join("\n\n"));
