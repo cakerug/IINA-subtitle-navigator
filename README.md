@@ -69,8 +69,8 @@ This project is intended to be:
 ---
 
 ### Editing | 字幕编辑
-- **Right-click a line for a context menu**: edit, revert, jump, loop, copy  
-  右键点击字幕行弹出菜单：编辑、撤销、跳转、循环、复制
+- **Right-click a line for a context menu**: edit, jump, loop, copy  
+  右键点击字幕行弹出菜单：编辑、跳转、循环、复制
 - While editing, `Enter` commits, `Shift+Enter` adds a newline, `Escape` cancels  
   编辑时 `Enter` 确认，`Shift+Enter` 换行，`Escape` 取消
 - `Cmd+Enter` edits the line playing right now  
@@ -85,9 +85,6 @@ This project is intended to be:
   discarded text is shown so you can type it back in — the list never claims an
   edit the `.srt` does not have  
   保存失败时该行会回退到文件中的实际内容，并显示被放弃的文本
-- **Revert to original** in the context menu restores the text the file had when it
-  was loaded, even after edits have been saved  
-  右键菜单中的 **Revert to original** 可恢复加载时的原始文本
 - **A backup is made before the first write**: `yourfile.srt` → `yourfile.srt.bak`,
   and it keeps the pristine original even across sessions  
   首次写入前会自动备份为 `yourfile.srt.bak`，且始终保留最初的原始版本

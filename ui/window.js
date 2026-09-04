@@ -132,7 +132,6 @@ function openContextMenu(x, y, r) {
   };
 
   add("Edit text", "⌘⏎", () => startEdit(r.id));
-  add("Revert to original", "", () => iina.postMessage("revertRow", { id: r.id }));
   sep();
   add("Jump to this line", "", () => iina.postMessage("seekTo", { time: r.start }));
   add("Loop this line", "", () => {

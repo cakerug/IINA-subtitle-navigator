@@ -68,10 +68,6 @@ dropping the list back to the last saved text, and hands the discarded strings t
 the UI so a correction that mattered can be typed in again. That trades a rare lost
 edit for never lying about what is on disk.
 
-`originalTexts` keeps each cue's text as first parsed, because saving replaces
-`cues[].text` with the edited version; without it "Revert to original" would only
-reach as far back as the last save.
-
 After a successful write the plugin re-parses the text it just produced instead of
 reading the file back. Line-count changes shift every later cue's span, so spans
 must be rebuilt either way, and this avoids both a disk read and the re-render that
@@ -115,7 +111,7 @@ aborts if a target is missing rather than shipping a half-patched plugin.
 
 UI → main: `uiReady`, `windowClosed`, `setSelection`, `seekTo`, `seekNearest`,
 `scrollToCurrent`, `loopLine`, `reload`, `copyFallback`
-— plus, added for editing: `editRow`, `revertRow`.
+— plus, added for editing: `editRow`.
 
 The row context menu is drawn in the WebView rather than by AppKit: the UI has no
 menu API, and `contextmenu` is suppressed document-wide so WebKit's own menu

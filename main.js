@@ -25,9 +25,6 @@ let backedUp = false;
 
 const AUTOSAVE_DELAY_MS = 2000;
 let autosaveTimer = null;
-// Text as first parsed from the file, for "Revert to original" once a save has
-// already replaced cues[].text with the edited version.
-let originalTexts = new Map();
 let saving = false;
 let saveQueued = false;
 // Our own sub-reload makes mpv re-announce the track list; re-reading the file in
@@ -252,7 +249,6 @@ async function refresh(force = false) {
 
   if (editsKey !== path) {
     edits.clear();
-    originalTexts = new Map();
     editsKey = path;
     backedUp = false;
   }
@@ -264,7 +260,6 @@ async function refresh(force = false) {
     cues = parsed.cues;
     srcLines = parsed.lines;
     srcPath = path;
-    if (!originalTexts.size) originalTexts = new Map(cues.map((c, id) => [id, c.text]));
     postRows({ path });
   } catch (e) {
     cues = []; rows = []; srcLines = [];
@@ -510,17 +505,6 @@ standaloneWindow.onMessage("editRow", (data) => {
   const next = text.replace(/\r/g, "").replace(/\n{2,}/g, "\n").trim();
   if (next === cues[id].text) edits.delete(id);
   else edits.set(id, next);
-  postRows();
-  scheduleAutosave();
-});
-
-standaloneWindow.onMessage("revertRow", (data) => {
-  const id = Number(data?.id);
-  if (!Number.isInteger(id) || !cues[id]) return;
-  const original = originalTexts.get(id);
-  if (typeof original !== "string") return;
-  if (original === cues[id].text) edits.delete(id);
-  else edits.set(id, original);
   postRows();
   scheduleAutosave();
 });
