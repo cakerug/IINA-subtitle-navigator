@@ -477,13 +477,6 @@ standaloneWindow.onMessage("seekNearest", (data) => {
   if (idx >= 0) core.seekTo(rows[idx].start + getSubDelay());
 });
 
-standaloneWindow.onMessage("seekCurrentLine", () => {
-  const t = mpv.getNumber("time-pos");
-  if (!Number.isFinite(t)) return;
-  const idx = closestRowIndexByTime(t);
-  if (idx >= 0) core.seekTo(rows[idx].start + getSubDelay());
-});
-
 standaloneWindow.onMessage("scrollToCurrent", () => {
   const t = mpv.getNumber("time-pos");
   if (!Number.isFinite(t)) return;

@@ -59,7 +59,8 @@ This project is intended to be:
   点击字幕即可跳转
 - **Jump to time (hh:mm:ss)**  
   适配数小时长视频（支持上下调节输入）
-- **Jump to current subtitle**
+- **Scroll to current subtitle**  
+  滚动到当前播放行
 - **Loop current line**  
   单句循环，适合听力与跟读
 - **Search subtitles**

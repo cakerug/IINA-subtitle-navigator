@@ -114,7 +114,7 @@ aborts if a target is missing rather than shipping a half-patched plugin.
 ## Message inventory
 
 UI → main: `uiReady`, `windowClosed`, `setSelection`, `seekTo`, `seekNearest`,
-`seekCurrentLine`, `scrollToCurrent`, `loopLine`, `reload`, `copyFallback`
+`scrollToCurrent`, `loopLine`, `reload`, `copyFallback`
 — plus, added for editing: `editRow`, `revertRow`.
 
 The row context menu is drawn in the WebView rather than by AppKit: the UI has no

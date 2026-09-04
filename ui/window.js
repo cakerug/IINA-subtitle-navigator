@@ -344,11 +344,6 @@ document.getElementById("autoScrollToggle").addEventListener("change", () => {
   }
 });
 
-document.getElementById("scrollTop").addEventListener("click", () => {
-  document.getElementById("list").scrollTo({ top: 0, behavior: "smooth" });
-});
-
-document.getElementById("jumpCurrent").addEventListener("click", () => iina.postMessage("seekCurrentLine", {}));
 document.getElementById("scrollCurrent").addEventListener("click", () => iina.postMessage("scrollToCurrent", {}));
 
 document.getElementById("jumpTime").addEventListener("click", () => {
