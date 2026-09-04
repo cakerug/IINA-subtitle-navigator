@@ -123,7 +123,7 @@ per row against current state rather than from a fixed list: the loop entry read
 selection when the right-clicked row is part of a multi-row one. With no toolbar
 control left, the row's own `.looping` marker is the only indication looping is on.
 
-Main → UI: `setTracks`, `setRows`, `time`, `scrollToIndex`, `liveSubtitle`
+Main → UI: `setTracks`, `setRows`, `time`, `scrollToIndex`
 — plus, added for editing: `saveResult` (failures only), `notice`.
 
 `render()` carries an open editor's text, caret and focus across a rebuild. Without

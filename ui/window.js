@@ -13,8 +13,6 @@ let loopingId = null;
 let currentTime = 0;
 let currentIdx = -1;
 
-let liveStart = null;
-
 let editingId = null;
 
 let noticeTimer = null;
@@ -344,10 +342,6 @@ document.getElementById("autoScrollToggle").addEventListener("change", () => {
 
 document.getElementById("scrollCurrent").addEventListener("click", () => iina.postMessage("scrollToCurrent", {}));
 
-document.getElementById("live").addEventListener("click", () => {
-  if (typeof liveStart === "number") iina.postMessage("seekTo", { time: liveStart });
-});
-
 document.addEventListener("mousedown", (e) => {
   if (!e.target.closest("#ctxMenu")) closeContextMenu();
 });
@@ -411,11 +405,6 @@ iina.onMessage("time", ({ t }) => {
 
 iina.onMessage("scrollToIndex", ({ idx }) => {
   if (typeof idx === "number") scrollToIndex(idx);
-});
-
-iina.onMessage("liveSubtitle", (data) => {
-  document.getElementById("liveText").innerText = data?.text || "";
-  liveStart = (typeof data?.start === "number") ? data.start : null;
 });
 
 iina.onMessage("notice", (data) => {

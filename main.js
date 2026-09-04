@@ -424,21 +424,6 @@ function startTicker() {
   }, 250);
 }
 
-let lastLiveKey = "";
-setInterval(() => {
-  try {
-    const t = mpv.getNumber("time-pos");
-    if (!Number.isFinite(t)) return;
-    const idx = closestRowIndexByTime(t);
-    if (idx < 0) return;
-    const r = rows[idx];
-    const key = `${idx}|${r.start}|${r.end}|${r.text}`;
-    if (key === lastLiveKey) return;
-    lastLiveKey = key;
-    post("liveSubtitle", { text: r.text, start: r.start, idx });
-  } catch (_) {}
-}, 200);
-
 standaloneWindow.onMessage("windowClosed", () => {
   uiReady = false;
   windowLoaded = false;
