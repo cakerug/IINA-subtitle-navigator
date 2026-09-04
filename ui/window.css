@@ -181,24 +181,11 @@ button {
     line-height: 1.35;
 }
 /* --- 编辑功能样式 --- */
-.spacer {
-    flex: 1;
-}
-
 .hint {
     margin-top: 8px;
     font-size: 11px;
     opacity: 0.6;
     flex-shrink: 0;
-}
-
-.dirtyBadge {
-    font-size: 11px;
-    padding: 2px 7px;
-    border-radius: 10px;
-    background: rgba(255, 149, 0, 0.22);
-    color: #b35f00;
-    white-space: nowrap;
 }
 
 .notice {
@@ -219,31 +206,6 @@ button {
     background: rgba(255, 59, 48, 0.16);
 }
 
-.item.dirty {
-    background: rgba(255, 149, 0, 0.10);
-}
-
-.item.dirty .time {
-    opacity: 1;
-}
-
-.dot {
-    display: inline-block;
-    width: 7px;
-    height: 7px;
-    margin-left: 6px;
-    border-radius: 50%;
-    background: #ff9500;
-    vertical-align: middle;
-}
-
-.revert {
-    margin-left: 8px;
-    padding: 1px 6px;
-    font-size: 10px;
-    vertical-align: middle;
-}
-
 .item.editing {
     background: rgba(0, 122, 255, 0.10);
     cursor: text;
@@ -260,12 +222,6 @@ button {
     border-radius: 5px;
     background: rgba(127, 127, 127, 0.08);
     color: inherit;
-}
-
-@media (prefers-color-scheme: dark) {
-    .dirtyBadge {
-        color: #ffb454;
-    }
 }
 
 /* --- 右键菜单 --- */
@@ -317,15 +273,4 @@ button {
     height: 1px;
     margin: 4px 6px;
     background: rgba(127, 127, 127, 0.28);
-}
-
-.dirtyBadge.saving {
-    background: rgba(0, 122, 255, 0.18);
-    color: #0a5bd3;
-}
-
-@media (prefers-color-scheme: dark) {
-    .dirtyBadge.saving {
-        color: #7ab6ff;
-    }
 }

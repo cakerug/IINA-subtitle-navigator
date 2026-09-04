@@ -13,9 +13,6 @@ let currentIdx = -1;
 let liveStart = null;
 
 let editingId = null;
-let dirtyCount = 0;
-let isSaving = false;
-let reloadArmedAt = 0;
 
 let noticeTimer = null;
 
@@ -72,16 +69,6 @@ function findCurrentIndex() {
     else return mid;
   }
   return best;
-}
-
-function updateDirtyUI() {
-  const btn = document.getElementById("save");
-  const badge = document.getElementById("dirtyBadge");
-  btn.disabled = dirtyCount === 0 || isSaving;
-  btn.textContent = dirtyCount ? `Save (${dirtyCount})` : "Save";
-  badge.hidden = !isSaving && dirtyCount === 0;
-  badge.textContent = isSaving ? "saving…" : (dirtyCount ? `${dirtyCount} unsaved` : "");
-  badge.classList.toggle("saving", isSaving);
 }
 
 function commitEdit(ta, id) {
@@ -145,7 +132,7 @@ function openContextMenu(x, y, r) {
   };
 
   add("Edit text", "⌘⏎", () => startEdit(r.id));
-  add("Revert to original", "", () => iina.postMessage("revertRow", { id: r.id }), !r.dirty);
+  add("Revert to original", "", () => iina.postMessage("revertRow", { id: r.id }));
   sep();
   add("Jump to this line", "", () => iina.postMessage("seekTo", { time: r.start }));
   add("Loop this line", "", () => {
@@ -232,7 +219,6 @@ function render() {
     item.className = "item"
       + (isSel ? " selected" : "")
       + (isCur ? " current" : "")
-      + (r.dirty ? " dirty" : "")
       + (isEditing ? " editing" : "");
     item.dataset.index = String(pos);
     item.dataset.id = String(r.id);
@@ -240,21 +226,6 @@ function render() {
     const time = document.createElement("div");
     time.className = "time";
     time.textContent = fmt(r.start);
-    if (r.dirty) {
-      const dot = document.createElement("span");
-      dot.className = "dot";
-      dot.title = "Unsaved edit";
-      time.appendChild(dot);
-
-      const revert = document.createElement("button");
-      revert.className = "revert";
-      revert.textContent = "Revert";
-      revert.addEventListener("click", (e) => {
-        e.stopPropagation();
-        iina.postMessage("revertRow", { id: r.id });
-      });
-      time.appendChild(revert);
-    }
     item.appendChild(time);
 
     if (isEditing) {
@@ -332,44 +303,23 @@ function scrollToIndex(idx) {
   if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
+// Saving happens on its own; this only skips the wait.
 function requestSave() {
   const ta = document.querySelector(".editor");
-  let justCommitted = false;
   if (ta) {
     const item = ta.closest(".item");
     if (!item) return;
-    justCommitted = commitEdit(ta, Number(item.dataset.id));
-    if (!justCommitted) return; // blank text; commitEdit already explained why
+    if (!commitEdit(ta, Number(item.dataset.id))) return; // blank; commitEdit said why
   }
-  if (!justCommitted && dirtyCount === 0) {
-    showNotice("No changes to save");
-    return;
-  }
-  isSaving = true;
-  updateDirtyUI();
   iina.postMessage("save", {});
 }
 
 /** Toolbar actions */
 document.getElementById("q").addEventListener("input", applyFilter);
 
-// Reloading re-reads the file from disk and throws away unsaved edits, so when there
-// are any it takes a second click to confirm rather than a native dialog.
 document.getElementById("reload").addEventListener("click", () => {
-  if (dirtyCount > 0 && Date.now() - reloadArmedAt > 5000) {
-    reloadArmedAt = Date.now();
-    showNotice(`Reload discards ${dirtyCount} unsaved edit(s). Click Reload again to confirm.`, "error");
-    return;
-  }
-  reloadArmedAt = 0;
   clearNotice();
   iina.postMessage("reload", {});
-});
-
-document.getElementById("save").addEventListener("click", requestSave);
-
-document.getElementById("autosaveToggle").addEventListener("change", (e) => {
-  iina.postMessage("setAutosave", { enabled: e.target.checked });
 });
 
 document.getElementById("track").addEventListener("change", () => {
@@ -457,8 +407,6 @@ iina.onMessage("setTracks", (data) => {
 
 iina.onMessage("setRows", ({ rows: r, meta }) => {
   rows = Array.isArray(r) ? r : [];
-  dirtyCount = Number(meta?.dirty) || 0;
-  updateDirtyUI();
 
   const liveIds = new Set(rows.map(x => x.id));
   for (const id of [...selected]) if (!liveIds.has(id)) selected.delete(id);
@@ -502,18 +450,12 @@ iina.onMessage("notice", (data) => {
   showNotice(String(data?.message || ""), data?.ok ? "info" : "error");
 });
 
-iina.onMessage("saveState", (data) => {
-  isSaving = Boolean(data?.saving);
-  dirtyCount = Number(data?.dirty) || 0;
-  const toggle = document.getElementById("autosaveToggle");
-  if (typeof data?.autosave === "boolean") toggle.checked = data.autosave;
-  updateDirtyUI();
-});
-
 iina.onMessage("saveResult", (data) => {
-  // An autosave that worked should not interrupt; only surface it when it failed.
-  if (data?.auto && data?.ok) return;
-  showNotice(String(data?.message || ""), data?.ok ? "ok" : "error");
+  // Saving is meant to be invisible; only a failure is worth interrupting for, and
+  // it carries the text that was rolled back so it can be typed in again.
+  if (data?.ok) return;
+  const discarded = String(data?.discarded || "");
+  showNotice(String(data?.message || "") + (discarded ? `\n\nReverted text: ${discarded}` : ""), "error");
 });
 
 iina.postMessage("uiReady", {});

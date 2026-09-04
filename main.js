@@ -24,8 +24,10 @@ let editsKey = "";
 let backedUp = false;
 
 const AUTOSAVE_DELAY_MS = 2000;
-let autosaveOn = true;
 let autosaveTimer = null;
+// Text as first parsed from the file, for "Revert to original" once a save has
+// already replaced cues[].text with the edited version.
+let originalTexts = new Map();
 let saving = false;
 let saveQueued = false;
 // Our own sub-reload makes mpv re-announce the track list; re-reading the file in
@@ -250,6 +252,7 @@ async function refresh(force = false) {
 
   if (editsKey !== path) {
     edits.clear();
+    originalTexts = new Map();
     editsKey = path;
     backedUp = false;
   }
@@ -261,6 +264,7 @@ async function refresh(force = false) {
     cues = parsed.cues;
     srcLines = parsed.lines;
     srcPath = path;
+    if (!originalTexts.size) originalTexts = new Map(cues.map((c, id) => [id, c.text]));
     postRows({ path });
   } catch (e) {
     cues = []; rows = []; srcLines = [];
@@ -307,16 +311,19 @@ function cancelAutosave() {
   if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
 }
 
+// Anything that swaps the loaded file out has to write a pending edit first,
+// otherwise an edit made inside the debounce window disappears silently.
+async function flushPending() {
+  if (!edits.size) { cancelAutosave(); return; }
+  await saveSubtitle({ auto: true });
+}
+
 // Batches a run of edits into one write and one subtitle reload, instead of paying
 // both on every committed line.
 function scheduleAutosave() {
   cancelAutosave();
-  if (!autosaveOn || !edits.size) return;
+  if (!edits.size) return;
   autosaveTimer = setTimeout(() => { autosaveTimer = null; saveSubtitle({ auto: true }); }, AUTOSAVE_DELAY_MS);
-}
-
-function postSaveState(extra) {
-  post("saveState", { dirty: edits.size, saving, autosave: autosaveOn, ...(extra || {}) });
 }
 
 async function writeSubtitleFile(path, text) {
@@ -367,7 +374,6 @@ async function saveSubtitle(opts = {}) {
 
   const count = edits.size;
   saving = true;
-  postSaveState();
   try {
     const check = await utils.exec("/bin/bash", ["-lc", `test -w ${shQuote(path)}`]);
     if (check && Number.isFinite(check.status) && check.status !== 0) {
@@ -396,11 +402,16 @@ async function saveSubtitle(opts = {}) {
   } catch (e) {
     const msg = fmtErr(e);
     log.error(msg);
-    core.osd("Subtitle save failed");
-    post("saveResult", { ok: false, message: msg, auto });
+    // Nothing reached the file, so drop the batch rather than leave the list showing
+    // text the .srt does not have. The discarded lines go into the error so a
+    // correction that mattered can be typed back in.
+    const lost = [...edits.values()].join(" / ");
+    edits.clear();
+    postRows();
+    core.osd("Subtitle save failed - edit reverted");
+    post("saveResult", { ok: false, message: `Save failed, edit reverted: ${msg}`, discarded: lost, auto });
   } finally {
     saving = false;
-    postSaveState();
     if (saveQueued) { saveQueued = false; scheduleAutosave(); }
   }
 }
@@ -436,8 +447,7 @@ setInterval(() => {
 standaloneWindow.onMessage("windowClosed", () => {
   uiReady = false;
   windowLoaded = false;
-  // Edits live here, not in the webview, so closing the window only hides them.
-  if (edits.size) core.osd(`${PLUGIN_LABEL}: ${edits.size} unsaved edit${edits.size === 1 ? "" : "s"} kept`);
+  flushPending();
 });
 
 standaloneWindow.onMessage("uiReady", () => {
@@ -445,11 +455,10 @@ standaloneWindow.onMessage("uiReady", () => {
   startTicker();
   // Not forced: keeps unsaved edits when the window is reopened on the same file.
   refresh(false);
-  postSaveState();
 });
 
-standaloneWindow.onMessage("setSelection", (data) => {
-  cancelAutosave();
+standaloneWindow.onMessage("setSelection", async (data) => {
+  await flushPending();
   const id = Number(data?.trackId);
   if (Number.isFinite(id)) trackId = id;
   lastStateKey = "";
@@ -514,24 +523,21 @@ standaloneWindow.onMessage("editRow", (data) => {
 
 standaloneWindow.onMessage("revertRow", (data) => {
   const id = Number(data?.id);
-  if (!Number.isInteger(id)) return;
-  edits.delete(id);
+  if (!Number.isInteger(id) || !cues[id]) return;
+  const original = originalTexts.get(id);
+  if (typeof original !== "string") return;
+  if (original === cues[id].text) edits.delete(id);
+  else edits.set(id, original);
   postRows();
   scheduleAutosave();
 });
 
+// Cmd+S just skips the debounce; there is no unsaved state for it to resolve.
 standaloneWindow.onMessage("save", () => { saveSubtitle(); });
 
-standaloneWindow.onMessage("setAutosave", (data) => {
-  autosaveOn = Boolean(data?.enabled);
-  if (autosaveOn) scheduleAutosave(); else cancelAutosave();
-  postSaveState();
-});
-
-standaloneWindow.onMessage("reload", () => {
-  cancelAutosave();
+standaloneWindow.onMessage("reload", async () => {
+  await flushPending();
   lastStateKey = "";
-  edits.clear();
   refresh(true);
 });
 
@@ -557,7 +563,7 @@ function onTrackEvent() {
   refresh(true);
 }
 
-event.on("mpv.file-loaded", () => { cancelAutosave(); lastStateKey = ""; refresh(true); });
+event.on("mpv.file-loaded", async () => { await flushPending(); lastStateKey = ""; refresh(true); });
 event.on("mpv.track-list.changed", onTrackEvent);
 event.on("mpv.sid.changed", onTrackEvent);
 event.on("mpv.sub-file.changed", onTrackEvent);
