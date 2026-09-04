@@ -14,6 +14,7 @@ let liveStart = null;
 
 let editingId = null;
 let dirtyCount = 0;
+let isSaving = false;
 let reloadArmedAt = 0;
 
 let noticeTimer = null;
@@ -76,10 +77,11 @@ function findCurrentIndex() {
 function updateDirtyUI() {
   const btn = document.getElementById("save");
   const badge = document.getElementById("dirtyBadge");
-  btn.disabled = dirtyCount === 0;
+  btn.disabled = dirtyCount === 0 || isSaving;
   btn.textContent = dirtyCount ? `Save (${dirtyCount})` : "Save";
-  badge.hidden = dirtyCount === 0;
-  badge.textContent = dirtyCount ? `${dirtyCount} unsaved` : "";
+  badge.hidden = !isSaving && dirtyCount === 0;
+  badge.textContent = isSaving ? "saving…" : (dirtyCount ? `${dirtyCount} unsaved` : "");
+  badge.classList.toggle("saving", isSaving);
 }
 
 function commitEdit(ta, id) {
@@ -343,6 +345,8 @@ function requestSave() {
     showNotice("No changes to save");
     return;
   }
+  isSaving = true;
+  updateDirtyUI();
   iina.postMessage("save", {});
 }
 
@@ -363,6 +367,10 @@ document.getElementById("reload").addEventListener("click", () => {
 });
 
 document.getElementById("save").addEventListener("click", requestSave);
+
+document.getElementById("autosaveToggle").addEventListener("change", (e) => {
+  iina.postMessage("setAutosave", { enabled: e.target.checked });
+});
 
 document.getElementById("track").addEventListener("change", () => {
   trackId = Number(document.getElementById("track").value);
@@ -494,7 +502,17 @@ iina.onMessage("notice", (data) => {
   showNotice(String(data?.message || ""), data?.ok ? "info" : "error");
 });
 
+iina.onMessage("saveState", (data) => {
+  isSaving = Boolean(data?.saving);
+  dirtyCount = Number(data?.dirty) || 0;
+  const toggle = document.getElementById("autosaveToggle");
+  if (typeof data?.autosave === "boolean") toggle.checked = data.autosave;
+  updateDirtyUI();
+});
+
 iina.onMessage("saveResult", (data) => {
+  // An autosave that worked should not interrupt; only surface it when it failed.
+  if (data?.auto && data?.ok) return;
   showNotice(String(data?.message || ""), data?.ok ? "ok" : "error");
 });
 

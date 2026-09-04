@@ -30,6 +30,7 @@
     <button id="clearSel">Clear</button>
 
     <span class="spacer"></span>
+    <label class="chk"><input type="checkbox" id="autosaveToggle" checked> Auto-save</label>
     <button id="save" disabled>Save</button>
     <span id="dirtyBadge" class="dirtyBadge" hidden></span>
   </div>
@@ -46,7 +47,7 @@
     </div>
   </div>
 
-  <div class="hint">Right-click a line for edit, jump, loop and copy actions. While editing: Enter commits, Shift+Enter adds a newline, Escape cancels. ⌘S writes to the .srt file.</div>
+  <div class="hint">Right-click a line for edit, jump, loop and copy actions. While editing: Enter commits, Shift+Enter adds a newline, Escape cancels. Edits are written to the .srt about 2s after you stop; ⌘S saves immediately.</div>
 
   <div class="live" id="live" title="Click to seek to this line">
     <div class="liveLine" id="liveText"></div>

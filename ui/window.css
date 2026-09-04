@@ -318,3 +318,14 @@ button {
     margin: 4px 6px;
     background: rgba(127, 127, 127, 0.28);
 }
+
+.dirtyBadge.saving {
+    background: rgba(0, 122, 255, 0.18);
+    color: #0a5bd3;
+}
+
+@media (prefers-color-scheme: dark) {
+    .dirtyBadge.saving {
+        color: #7ab6ff;
+    }
+}

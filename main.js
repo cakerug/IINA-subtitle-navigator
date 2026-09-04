@@ -23,6 +23,15 @@ let edits = new Map();
 let editsKey = "";
 let backedUp = false;
 
+const AUTOSAVE_DELAY_MS = 2000;
+let autosaveOn = true;
+let autosaveTimer = null;
+let saving = false;
+let saveQueued = false;
+// Our own sub-reload makes mpv re-announce the track list; re-reading the file in
+// response would undo the in-memory resync and re-render over an open editor.
+let selfReloadAt = 0;
+
 let lastStateKey = "";
 let timeTicker = null;
 let loop = { enabled: false, start: 0, end: 0 };
@@ -232,7 +241,7 @@ async function refresh(force = false) {
   }
 
   const path = allSubTracks.find(t => t.id === trackId)?.path || "";
-  const stateKey = `${trackId}|${path}`;
+  const stateKey = path;
   if (!force && stateKey === lastStateKey && cues.length) {
     postRows();
     return;
@@ -294,9 +303,60 @@ async function backupOnce(path) {
   backedUp = true;
 }
 
-async function saveSubtitle() {
+function cancelAutosave() {
+  if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
+}
+
+// Batches a run of edits into one write and one subtitle reload, instead of paying
+// both on every committed line.
+function scheduleAutosave() {
+  cancelAutosave();
+  if (!autosaveOn || !edits.size) return;
+  autosaveTimer = setTimeout(() => { autosaveTimer = null; saveSubtitle({ auto: true }); }, AUTOSAVE_DELAY_MS);
+}
+
+function postSaveState(extra) {
+  post("saveState", { dirty: edits.size, saving, autosave: autosaveOn, ...(extra || {}) });
+}
+
+async function writeSubtitleFile(path, text) {
+  // file.write refuses to overwrite anything outside @tmp/@data, so stage the new
+  // text there and move it into place with the shell.
+  const staged = "@tmp/subtitle-navigator-save.srt";
+  file.write(staged, text);
+  const stagedReal = utils.resolvePath(staged);
+
+  // Copy the original first so the replacement inherits its mode, then rename over
+  // it. A plain `cat > path` would truncate the only copy before writing a byte,
+  // and autosave takes that risk on every batch rather than once a session.
+  const swap = path + ".sn-tmp";
+  const cmd = [
+    `cp -p ${shQuote(path)} ${shQuote(swap)}`,
+    `cat ${shQuote(stagedReal)} > ${shQuote(swap)}`,
+    `mv -f ${shQuote(swap)} ${shQuote(path)}`,
+  ].join(" && ");
+  const res = await utils.exec("/bin/bash", ["-lc", `${cmd} || { rm -f ${shQuote(swap)}; exit 1; }`]);
+  if (!res || !Number.isFinite(res.status) || res.status === 0) return;
+
+  // The rename needs a writable *directory*; the subtitle may sit in a read-only one
+  // beside a writable file (a mounted share, say). Fall back to writing in place,
+  // which is what this did before and still works there.
+  const direct = await utils.exec("/bin/bash", ["-lc", `cat ${shQuote(stagedReal)} > ${shQuote(path)}`]);
+  if (direct && Number.isFinite(direct.status) && direct.status !== 0) {
+    throw new Error(`Write failed: ${direct.stderr || res.stderr || `exit ${direct.status}`}`);
+  }
+  log.error(`Atomic replace unavailable for ${path}; wrote in place instead.`);
+}
+
+async function saveSubtitle(opts = {}) {
+  const auto = Boolean(opts.auto);
+  cancelAutosave();
+
+  // Never let two writes overlap; the second runs once the first settles.
+  if (saving) { saveQueued = true; return; }
+
   if (!edits.size) {
-    post("saveResult", { ok: true, saved: 0, message: "No changes to save" });
+    if (!auto) post("saveResult", { ok: true, saved: 0, message: "No changes to save" });
     return;
   }
   const path = srcPath;
@@ -306,6 +366,8 @@ async function saveSubtitle() {
   }
 
   const count = edits.size;
+  saving = true;
+  postSaveState();
   try {
     const check = await utils.exec("/bin/bash", ["-lc", `test -w ${shQuote(path)}`]);
     if (check && Number.isFinite(check.status) && check.status !== 0) {
@@ -314,32 +376,32 @@ async function saveSubtitle() {
 
     await backupOnce(path);
 
-    // file.write refuses to overwrite anything outside @tmp/@data, so stage the
-    // new text there and copy it over the original with the shell.
-    const staged = "@tmp/subtitle-navigator-save.srt";
-    file.write(staged, buildSRT());
-    const stagedReal = utils.resolvePath(staged);
+    const text = buildSRT();
+    await writeSubtitleFile(path, text);
 
-    // Redirect into the original path instead of mv, to keep its inode and permissions.
-    const res = await utils.exec("/bin/bash", ["-lc", `cat ${shQuote(stagedReal)} > ${shQuote(path)}`]);
-    if (res && Number.isFinite(res.status) && res.status !== 0) {
-      throw new Error(`Write failed: ${res.stderr || `exit ${res.status}`}`);
-    }
-
+    // Re-parse what we just wrote rather than reading it back. Line-count changes
+    // shift every later cue's span, so the spans have to be rebuilt either way, and
+    // this skips a disk read plus the re-render that came with it.
+    const parsed = parseSRT(text);
+    cues = parsed.cues;
+    srcLines = parsed.lines;
     edits.clear();
 
+    selfReloadAt = Date.now();
     try { mpv.command("sub-reload", [String(trackId)]); } catch (e) { log.error(fmtErr(e)); }
 
-    lastStateKey = "";
-    await refresh(true);
-
+    postRows();
     core.osd(`Saved ${count} subtitle edit${count === 1 ? "" : "s"}`);
-    post("saveResult", { ok: true, saved: count, message: `Saved ${count} edit${count === 1 ? "" : "s"}` });
+    post("saveResult", { ok: true, saved: count, message: `Saved ${count} edit${count === 1 ? "" : "s"}`, auto });
   } catch (e) {
     const msg = fmtErr(e);
     log.error(msg);
     core.osd("Subtitle save failed");
-    post("saveResult", { ok: false, message: msg });
+    post("saveResult", { ok: false, message: msg, auto });
+  } finally {
+    saving = false;
+    postSaveState();
+    if (saveQueued) { saveQueued = false; scheduleAutosave(); }
   }
 }
 
@@ -383,9 +445,11 @@ standaloneWindow.onMessage("uiReady", () => {
   startTicker();
   // Not forced: keeps unsaved edits when the window is reopened on the same file.
   refresh(false);
+  postSaveState();
 });
 
 standaloneWindow.onMessage("setSelection", (data) => {
+  cancelAutosave();
   const id = Number(data?.trackId);
   if (Number.isFinite(id)) trackId = id;
   lastStateKey = "";
@@ -445,6 +509,7 @@ standaloneWindow.onMessage("editRow", (data) => {
   if (next === cues[id].text) edits.delete(id);
   else edits.set(id, next);
   postRows();
+  scheduleAutosave();
 });
 
 standaloneWindow.onMessage("revertRow", (data) => {
@@ -452,11 +517,19 @@ standaloneWindow.onMessage("revertRow", (data) => {
   if (!Number.isInteger(id)) return;
   edits.delete(id);
   postRows();
+  scheduleAutosave();
 });
 
 standaloneWindow.onMessage("save", () => { saveSubtitle(); });
 
+standaloneWindow.onMessage("setAutosave", (data) => {
+  autosaveOn = Boolean(data?.enabled);
+  if (autosaveOn) scheduleAutosave(); else cancelAutosave();
+  postSaveState();
+});
+
 standaloneWindow.onMessage("reload", () => {
+  cancelAutosave();
   lastStateKey = "";
   edits.clear();
   refresh(true);
@@ -477,7 +550,14 @@ standaloneWindow.onMessage("copyFallback", async (data) => {
   }
 });
 
-event.on("mpv.file-loaded", () => { lastStateKey = ""; refresh(true); });
-event.on("mpv.track-list.changed", () => { lastStateKey = ""; refresh(true); });
-event.on("mpv.sid.changed", () => { lastStateKey = ""; refresh(true); });
-event.on("mpv.sub-file.changed", () => { lastStateKey = ""; refresh(true); });
+function onTrackEvent() {
+  // Ignore the echo of our own save; the in-memory copy is already what is on disk.
+  if (Date.now() - selfReloadAt < 2000) { refresh(false); return; }
+  lastStateKey = "";
+  refresh(true);
+}
+
+event.on("mpv.file-loaded", () => { cancelAutosave(); lastStateKey = ""; refresh(true); });
+event.on("mpv.track-list.changed", onTrackEvent);
+event.on("mpv.sid.changed", onTrackEvent);
+event.on("mpv.sub-file.changed", onTrackEvent);
