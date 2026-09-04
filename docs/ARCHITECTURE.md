@@ -52,6 +52,30 @@ ordering, and unparsed junk all survive.
 The one deliberate lossy edge: an edited cue is written back from the `stripCurly()`ed
 text, so editing a cue that had `{...}` tags drops them from that cue only.
 
+### Saving is debounced, and re-parses in memory
+
+Edits arm a ~2s timer that is reset by each further edit, so a correction pass
+costs one write and one `sub-reload` instead of one per line. `Cmd+S` cancels the
+timer and writes immediately; a save that arrives while one is in flight is
+queued rather than run concurrently.
+
+After a successful write the plugin re-parses the text it just produced instead of
+reading the file back. Line-count changes shift every later cue's span, so spans
+must be rebuilt either way, and this avoids both a disk read and the re-render that
+came with it.
+
+`sub-reload` makes mpv re-announce its track list, which would otherwise trigger a
+full re-read of the file we just wrote. `selfReloadAt` suppresses that echo for two
+seconds.
+
+### Writes are atomic, with an in-place fallback
+
+The staged text is copied over a `.sn-tmp` sibling (seeded with `cp -p` so it
+inherits the original's mode) and then renamed into place, so a failure mid-write
+cannot leave a truncated subtitle file. Renaming needs a writable *directory*,
+which a read-only share may not give even when the file itself is writable, so a
+failed rename falls back to writing in place.
+
 ### Line endings
 
 `parseSRT` normalizes `\r` away before splitting. Saving re-joins with `\n`, so a
@@ -78,11 +102,15 @@ aborts if a target is missing rather than shipping a half-patched plugin.
 
 UI → main: `uiReady`, `windowClosed`, `setSelection`, `seekTo`, `seekNearest`,
 `seekCurrentLine`, `scrollToCurrent`, `loopLine`, `reload`, `copyFallback`
-— plus, added for editing: `editRow`, `revertRow`, `save`.
+— plus, added for editing: `editRow`, `revertRow`, `save`, `setAutosave`.
 
 The row context menu is drawn in the WebView rather than by AppKit: the UI has no
 menu API, and `contextmenu` is suppressed document-wide so WebKit's own menu
 (Reload, Save Page As…) never appears.
 
 Main → UI: `setTracks`, `setRows`, `time`, `scrollToIndex`, `liveSubtitle`
-— plus, added for editing: `saveResult`.
+— plus, added for editing: `saveResult`, `saveState`, `notice`.
+
+`render()` carries an open editor's text, caret and focus across a rebuild. Without
+that, any `setRows` arriving mid-typing (which autosave makes routine) would reseed
+the textarea from the row text and discard what had been typed.

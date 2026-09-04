@@ -76,11 +76,19 @@ This project is intended to be:
   `Cmd+Enter` 直接编辑当前播放行
 - **Unsaved edits are marked** with an amber dot and a per-line `Revert` button  
   未保存的修改会显示橙色圆点，并提供单行撤销按钮
-- **`Cmd+S` (or the Save button) writes back to the `.srt`**, then reloads the
-  subtitle track so the correction shows up in playback immediately  
-  `Cmd+S` 或保存按钮写回 `.srt` 文件，并重新加载字幕轨，修改立即生效
-- **A backup is made before the first write**: `yourfile.srt` → `yourfile.srt.bak`  
-  首次写入前会自动备份为 `yourfile.srt.bak`
+- **Auto-save**: edits are written to the `.srt` about 2 seconds after you stop
+  typing, then the subtitle track reloads so the fix shows up in playback  
+  自动保存：停止输入约 2 秒后写回 `.srt`，并重新加载字幕轨
+- A run of edits batches into **one** write and **one** reload, rather than paying
+  both per line  
+  连续编辑会合并为一次写入与一次重载
+- `Cmd+S` saves immediately; untick **Auto-save** to save only on demand  
+  `Cmd+S` 立即保存；取消勾选 **Auto-save** 则仅手动保存
+- **A backup is made before the first write**: `yourfile.srt` → `yourfile.srt.bak`,
+  and it keeps the pristine original even across sessions  
+  首次写入前会自动备份为 `yourfile.srt.bak`，且始终保留最初的原始版本
+- Writes are **atomic** — the file is replaced by rename, never truncated in place  
+  写入是原子的：通过重命名替换文件，不会就地截断
 
 Only the lines you actually edit are rewritten. Everything else in the file —
 cue numbering, timestamp formatting, style tags, and any cues the parser skips —
@@ -185,6 +193,7 @@ You are encouraged to:
 - Editing changes subtitle **text** only — timestamps are not editable
 - Saving normalizes CRLF line endings to LF
 - Switching tracks or pressing **Reload** discards unsaved edits (Reload asks first)
+- With auto-save on, **Revert** only helps within the ~2s window before the write
 
 ---
 
