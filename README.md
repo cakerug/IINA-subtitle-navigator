@@ -59,8 +59,8 @@ This project is intended to be:
   点击字幕即可跳转
 - **Scroll to current subtitle**  
   滚动到当前播放行
-- **Loop current line**  
-  单句循环，适合听力与跟读
+- **Loop a line** from the right-click menu, until you stop it there  
+  右键菜单开启单句循环，再次右键该行可停止
 - **Search subtitles**
 - **Multi-select & copy**
 

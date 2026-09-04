@@ -117,6 +117,11 @@ The row context menu is drawn in the WebView rather than by AppKit: the UI has n
 menu API, and `contextmenu` is suppressed document-wide so WebKit's own menu
 (Reload, Save Page As…) never appears.
 
+The menu is the only control for looping, so its entries are built per row against
+current state rather than from a fixed list: the loop entry reads "Stop looping" on
+the row `loopingId` names. With no toolbar control left, the row's own `.looping`
+marker is the only indication looping is on.
+
 Main → UI: `setTracks`, `setRows`, `time`, `scrollToIndex`, `liveSubtitle`
 — plus, added for editing: `saveResult` (failures only), `notice`.
 

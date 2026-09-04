@@ -6,6 +6,9 @@ let filtered = [];
 // Row ids, not list positions, so selection survives re-renders and search changes.
 let selected = new Set();
 let lastClickedPos = null;
+// Row id currently looping, so the context menu can offer to stop it and the
+// list can mark the row. Looping follows a plain click to another line.
+let loopingId = null;
 
 let currentTime = 0;
 let currentIdx = -1;
@@ -134,10 +137,19 @@ function openContextMenu(x, y, r) {
   add("Edit text", "⌘⏎", () => startEdit(r.id));
   sep();
   add("Jump to this line", "", () => iina.postMessage("seekTo", { time: r.start }));
-  add("Loop this line", "", () => {
-    document.getElementById("loopToggle").checked = true;
-    iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
-  });
+  if (loopingId === r.id) {
+    add("Stop looping", "", () => {
+      loopingId = null;
+      iina.postMessage("loopLine", { enabled: false });
+      render();
+    });
+  } else {
+    add("Loop this line", "", () => {
+      loopingId = r.id;
+      iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
+      render();
+    });
+  }
   sep();
   add("Copy text", "", () => copyText(r.text || ""));
   add("Copy with timestamp", "", () => copyText(`[${fmt(r.start)}] ${r.text || ""}`));
@@ -218,7 +230,8 @@ function render() {
     item.className = "item"
       + (isSel ? " selected" : "")
       + (isCur ? " current" : "")
-      + (isEditing ? " editing" : "");
+      + (isEditing ? " editing" : "")
+      + (r.id === loopingId ? " looping" : "");
     item.dataset.index = String(pos);
     item.dataset.id = String(r.id);
 
@@ -263,8 +276,10 @@ function render() {
         iina.postMessage("seekTo", { time: r.start });
       }
 
-      const loopOn = document.getElementById("loopToggle").checked;
-      if (loopOn) iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
+      if (loopingId != null) {
+        loopingId = r.id;
+        iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
+      }
       render();
     });
 
@@ -320,15 +335,6 @@ document.getElementById("copySel").addEventListener("click", async () => {
   await copyText(parts.join("\n\n"));
 });
 
-document.getElementById("loopToggle").addEventListener("change", () => {
-  const on = document.getElementById("loopToggle").checked;
-  if (!on) iina.postMessage("loopLine", { enabled: false });
-  else if (currentIdx >= 0) {
-    const r = filtered[currentIdx];
-    if (r) iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
-  }
-});
-
 // 手动切换自动滚动开关时的逻辑
 document.getElementById("autoScrollToggle").addEventListener("change", () => {
   const on = document.getElementById("autoScrollToggle").checked;
@@ -374,6 +380,10 @@ iina.onMessage("setRows", ({ rows: r, meta }) => {
   const liveIds = new Set(rows.map(x => x.id));
   for (const id of [...selected]) if (!liveIds.has(id)) selected.delete(id);
   if (editingId != null && !liveIds.has(editingId)) editingId = null;
+  if (loopingId != null && !liveIds.has(loopingId)) {
+    loopingId = null;
+    iina.postMessage("loopLine", { enabled: false });
+  }
 
   const el = document.getElementById("meta");
   if (meta?.error) el.innerText = `Error: ${meta.error}`;
