@@ -57,8 +57,6 @@ This project is intended to be:
 ### Navigation & Learning | 跳转与学习
 - **Clickable subtitle list**  
   点击字幕即可跳转
-- **Jump to time (hh:mm:ss)**  
-  适配数小时长视频（支持上下调节输入）
 - **Scroll to current subtitle**  
   滚动到当前播放行
 - **Loop current line**  

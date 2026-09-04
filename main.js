@@ -465,13 +465,6 @@ standaloneWindow.onMessage("seekTo", (data) => {
   if (Number.isFinite(t)) core.seekTo(t + getSubDelay());
 });
 
-standaloneWindow.onMessage("seekNearest", (data) => {
-  const t = Number(data?.time);
-  if (!Number.isFinite(t)) return;
-  const idx = closestRowIndexByTime(t);
-  if (idx >= 0) core.seekTo(rows[idx].start + getSubDelay());
-});
-
 standaloneWindow.onMessage("scrollToCurrent", () => {
   const t = mpv.getNumber("time-pos");
   if (!Number.isFinite(t)) return;

@@ -109,7 +109,7 @@ aborts if a target is missing rather than shipping a half-patched plugin.
 
 ## Message inventory
 
-UI → main: `uiReady`, `windowClosed`, `setSelection`, `seekTo`, `seekNearest`,
+UI → main: `uiReady`, `windowClosed`, `setSelection`, `seekTo`,
 `scrollToCurrent`, `loopLine`, `reload`, `copyFallback`
 — plus, added for editing: `editRow`.
 

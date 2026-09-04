@@ -339,15 +339,6 @@ document.getElementById("autoScrollToggle").addEventListener("change", () => {
 
 document.getElementById("scrollCurrent").addEventListener("click", () => iina.postMessage("scrollToCurrent", {}));
 
-document.getElementById("jumpTime").addEventListener("click", () => {
-  const hh = Number(document.getElementById("hh")?.value || "0");
-  const mm = Number(document.getElementById("mm")?.value || "0");
-  const ss = Number(document.getElementById("ss")?.value || "0");
-  if (![hh, mm, ss].every(n => Number.isFinite(n) && n >= 0)) return;
-  const t = Math.max(0, hh * 3600 + (mm % 60) * 60 + (ss % 60));
-  iina.postMessage("seekNearest", { time: t });
-});
-
 document.getElementById("live").addEventListener("click", () => {
   if (typeof liveStart === "number") iina.postMessage("seekTo", { time: liveStart });
 });
