@@ -1,10 +1,10 @@
 {
   "name": "Subtitle Navigator",
-  "identifier": "info.junjie-chen.subtitle-navigator",
+  "identifier": "info.cakerug.subtitle-navigator",
   "version": "1.1.0",
   "author": {
-    "name": "GPT 5.2 & Junjie Chen",
-    "url": "https://junjie-chen.info"
+    "name": "Grace Ku",
+    "url": "https://github.com/cakerug"
   },
   "description": "Subtitle Navigator (standalone window). Browse, search, loop and edit subtitles.",
   "entry": "main.js",

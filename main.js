@@ -1,7 +1,5 @@
 const { core, standaloneWindow, event, mpv, file, utils, console: log, menu } = iina;
 
-// Kept on their own lines as plain literals: scripts/build-plugin.sh rewrites them
-// for the dev build so it can run side by side with the released plugin.
 const PLUGIN_LABEL = "Subtitle Navigator";
 const MENU_SHORTCUT = "cmd+shift+s";
 
