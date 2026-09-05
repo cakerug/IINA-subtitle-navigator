@@ -691,8 +691,10 @@ iina.onMessage("setRows", ({ rows: r, meta }) => {
 
   listMessage = meta?.error || "";
 
+  const count = meta?.count ?? rows.length;
   const el = document.getElementById("meta");
-  el.innerText = `Rows: ${meta?.count ?? rows.length}`;
+  el.innerText = count ? `Rows: ${count}` : "";
+  el.hidden = !count;
 
   applyFilter();
 });
