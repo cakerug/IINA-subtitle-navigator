@@ -36,6 +36,8 @@ let loadedPath = null;
 
 let noticeTimer = null;
 
+let listMessage = "";
+
 function fmt(t) {
   const s = Math.max(0, Math.floor(t));
   const h = String(Math.floor(s / 3600)).padStart(2, "0");
@@ -323,6 +325,14 @@ function render() {
   closeContextMenu();
   list.innerHTML = "";
   currentIdx = findCurrentIndex();
+
+  if (!filtered.length && listMessage) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.innerText = listMessage;
+    list.appendChild(empty);
+    return;
+  }
 
   filtered.forEach((r, pos) => {
     const item = document.createElement("div");
@@ -679,9 +689,12 @@ iina.onMessage("setRows", ({ rows: r, meta }) => {
     iina.postMessage("loopLine", { enabled: false });
   }
 
+  listMessage = meta?.error || "";
+
+  const count = meta?.count ?? rows.length;
   const el = document.getElementById("meta");
-  if (meta?.error) el.innerText = `Error: ${meta.error}`;
-  else el.innerText = `Rows: ${meta?.count ?? rows.length}`;
+  el.innerText = count ? `Rows: ${count}` : "";
+  el.hidden = !count;
 
   applyFilter();
 });

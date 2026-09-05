@@ -193,6 +193,13 @@ button {
     flex-shrink: 0;
 }
 
+.empty {
+    padding: 24px 8px;
+    text-align: center;
+    opacity: 0.55;
+    font-size: 13px;
+}
+
 /* --- 列表区域 (独立滚动) --- */
 .list {
     border-top: 1px solid rgba(127, 127, 127, 0.25);
