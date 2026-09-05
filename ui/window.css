@@ -171,8 +171,7 @@ button {
     word-break: break-all;
 }
 
-/* Takes the row's slack, so the pair sits against the right edge whether or not
-   the row count beside it is showing. */
+/* Takes the row's slack, so the pair sits against the right edge. */
 #undo {
     margin-left: auto;
 }

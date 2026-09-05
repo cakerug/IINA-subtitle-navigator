@@ -691,10 +691,11 @@ iina.onMessage("setRows", ({ rows: r, meta }) => {
 
   listMessage = meta?.error || "";
 
+  // The whole row goes with the count: with nothing loaded there is no row count to
+  // report and nothing to undo either.
   const count = meta?.count ?? rows.length;
-  const el = document.getElementById("meta");
-  el.innerText = count ? `Rows: ${count}` : "";
-  el.hidden = !count;
+  document.getElementById("meta").innerText = count ? `Rows: ${count}` : "";
+  document.querySelector(".statusRow").hidden = !count;
 
   applyFilter();
 });
