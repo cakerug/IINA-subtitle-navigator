@@ -189,6 +189,12 @@ button {
     font-size: 13px;
 }
 
+/* The status row's margin is what normally holds the find bar off the list's top
+   border; when the row hides itself, the list has to supply that gap instead. */
+.statusRow[hidden]+.list {
+    margin-top: 10px;
+}
+
 /* --- 列表区域 (独立滚动) --- */
 .list {
     border-top: 1px solid rgba(127, 127, 127, 0.25);
