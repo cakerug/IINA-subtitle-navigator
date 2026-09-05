@@ -77,7 +77,7 @@ This project is intended to be:
   编辑时 `Enter` 确认，`Shift+Enter` 换行，`Escape` 取消
 - `Cmd+Enter` edits the line playing right now  
   `Cmd+Enter` 直接编辑当前播放行
-- **Undo and redo** with `⌘Z` / `⇧⌘Z`, or the buttons in the Edit section. One step is one
+- **Undo and redo** with `⌘Z` / `⇧⌘Z`, or the toolbar buttons. One step is one
   action, so a Replace All across a hundred lines undoes in a single press  
   `⌘Z` / `⇧⌘Z` 撤销与重做；一次「全部替换」也只需按一次即可撤销
 - **Saving is invisible.** There is no dirty marker and no Save step: an edit is
