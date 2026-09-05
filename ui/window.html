@@ -15,39 +15,44 @@
     <button id="reload">Reload</button>
   </div>
 
-  <div class="find">
-    <button id="toggleReplace" class="findToggle" title="Toggle Replace" aria-expanded="false">
-      <span class="chev">&#8250;</span>
-    </button>
-    <div class="findRows">
-      <div class="findRow">
-        <input id="q" placeholder="Search..." />
-        <button id="caseToggle" class="toggleBtn" title="Match case" aria-pressed="false">Aa</button>
-        <span id="matchCount" class="findCount"></span>
-        <button id="prevMatch" class="iconBtn" title="Previous match (Shift+Enter)" disabled>&#8593;</button>
-        <button id="nextMatch" class="iconBtn" title="Next match (Enter)" disabled>&#8595;</button>
-      </div>
-      <div class="findRow" id="replaceRow" hidden>
-        <input id="replaceWith" placeholder="Replace with..." />
-        <button id="replaceOne" title="Replace this match (Enter)" disabled>Replace</button>
-        <button id="replaceAll" title="Replace every match" disabled>All</button>
+  <section class="editBar">
+    <div class="editHead">
+      <span class="sectionTitle">Edit</span>
+      <button id="undo" class="smallBtn" title="Undo (⌘Z)" disabled>Undo</button>
+      <button id="redo" class="smallBtn" title="Redo (⇧⌘Z)" disabled>Redo</button>
+    </div>
+
+    <div class="find">
+      <button id="toggleReplace" class="findToggle" title="Toggle Replace" aria-expanded="false">
+        <span class="chev">&#8250;</span>
+      </button>
+      <div class="findRows">
+        <div class="findRow">
+          <input id="q" placeholder="Search..." />
+          <button id="caseToggle" class="toggleBtn" title="Match case" aria-pressed="false">Aa</button>
+          <span id="matchCount" class="findCount"></span>
+          <button id="prevMatch" class="iconBtn" title="Previous match (Shift+Enter)" disabled>&#8593;</button>
+          <button id="nextMatch" class="iconBtn" title="Next match (Enter)" disabled>&#8595;</button>
+        </div>
+        <div class="findRow" id="replaceRow" hidden>
+          <input id="replaceWith" placeholder="Replace with..." />
+          <button id="replaceOne" title="Replace this match (Enter)" disabled>Replace</button>
+          <button id="replaceAll" title="Replace every match" disabled>All</button>
+        </div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <div class="toolbar2">
-    <button id="undo" title="Undo (⌘Z)" disabled>Undo</button>
-    <button id="redo" title="Redo (⇧⌘Z)" disabled>Redo</button>
-    <span class="sep"></span>
-    <button id="scrollCurrent">Scroll to Current</button>
-    <label class="chk"><input type="checkbox" id="autoScrollToggle"> Auto-scroll</label>
-  </div>
-
-  <div class="hint">Right-click a line for edit, jump, loop and copy actions. While editing: Enter commits, Shift+Enter adds a newline, Escape cancels. ⌘Z undoes edits and replacements.</div>
+  <div class="hint">Right-click a line for edit, jump, loop and copy actions. While editing: Enter commits, Shift+Enter adds a newline, Escape cancels.</div>
 
   <div id="notice" class="notice" hidden></div>
   <div id="meta" class="meta"></div>
   <div id="list" class="list"></div>
+
+  <div class="toolbar bottomBar">
+    <button id="scrollCurrent">Scroll to Current</button>
+    <label class="chk"><input type="checkbox" id="autoScrollToggle"> Auto-scroll</label>
+  </div>
 
   <div id="ctxMenu" class="ctxMenu" hidden></div>
 

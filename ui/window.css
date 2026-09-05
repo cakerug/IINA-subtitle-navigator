@@ -27,8 +27,7 @@ body {
 }
 
 /* --- 工具栏样式 --- */
-.toolbar,
-.toolbar2 {
+.toolbar {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
@@ -36,8 +35,10 @@ body {
     flex-shrink: 0;
 }
 
-.toolbar2 {
-    margin-top: 8px;
+/* Sits under the list, so it needs the divider .list only draws on top. */
+.bottomBar {
+    padding-top: 10px;
+    border-top: 1px solid rgba(127, 127, 127, 0.25);
 }
 
 .toolbar .row {
@@ -51,7 +52,37 @@ body {
     min-width: 220px;
 }
 
-/* --- 查找/替换控件 --- */
+/* --- 编辑区 (查找/替换 + 撤销) --- */
+.editBar {
+    margin-top: 10px;
+    padding: 8px 10px 10px;
+    border: 1px solid rgba(127, 127, 127, 0.25);
+    border-radius: 8px;
+    background: rgba(127, 127, 127, 0.06);
+    flex-shrink: 0;
+}
+
+.editHead {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Takes the slack, so the buttons after it sit against the right edge. */
+.sectionTitle {
+    flex: 1;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    opacity: 0.55;
+}
+
+.smallBtn {
+    padding: 3px 10px;
+    font-size: 12px;
+}
+
 .find {
     display: flex;
     align-items: stretch;
@@ -130,13 +161,6 @@ body {
     background: #007aff;
     border-color: #007aff;
     color: #fff;
-}
-
-.toolbar2 .sep {
-    width: 1px;
-    align-self: stretch;
-    margin: 2px 2px;
-    background: rgba(127, 127, 127, 0.3);
 }
 
 .lbl {
