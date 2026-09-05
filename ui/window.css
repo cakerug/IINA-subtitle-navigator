@@ -119,6 +119,19 @@ body {
     text-align: center;
 }
 
+.toggleBtn {
+    width: 34px;
+    padding: 6px 0;
+    text-align: center;
+    font-size: 12px;
+}
+
+.toggleBtn[aria-pressed="true"] {
+    background: #007aff;
+    border-color: #007aff;
+    color: #fff;
+}
+
 .lbl {
     font-size: 12px;
     opacity: 0.8;

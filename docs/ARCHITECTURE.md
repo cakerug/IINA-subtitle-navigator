@@ -109,14 +109,16 @@ aborts if a target is missing rather than shipping a half-patched plugin.
 
 ### Search, highlighting and replace
 
-The filter is a case-insensitive substring test. Highlighting and replace both work
-off `searchRegex()`, the query escaped into a `gi` regex, which matches exactly the
-same spans the filter tested — so the marks can never disagree with why a row is in
-the list. Marked lines are assembled from text nodes and `<mark>` elements rather
-than `innerHTML`, so subtitle text containing `<` or `&` cannot become markup.
+Filtering, highlighting and replace all derive their match from one escaped literal
+regex (`buildRegex()`), so they can never disagree about what counts as a match. The
+`Aa` toggle drops the `i` flag for all three at once. The filter takes the non-global
+form, whose `.test()` is stateless and so can be reused down the rows; highlight and
+replace take the global form, freshly built per call so `lastIndex` cannot leak.
+Marked lines are assembled from text nodes and `<mark>` elements rather than
+`innerHTML`, so subtitle text containing `<` or `&` cannot become markup.
 
 `matches` is a flat list of every occurrence in list order, rebuilt by
-`computeMatches()` on any change to the query or the rows; `matchIdx` names the one
+`computeMatches()` on any change to the query, the case flag or the rows; `matchIdx` names the one
 `mark.active` colours and Replace acts on. There is deliberately no Replace All: the
 only undo is the `.bak` copy of the whole file, so each replacement is one the user
 has just seen highlighted. A replacement that would empty a cue is refused rather

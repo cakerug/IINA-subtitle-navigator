@@ -66,19 +66,38 @@ function normalizeText(value) {
   return String(value ?? "").replace(/\r/g, "").replace(/\n{2,}/g, "\n").trim();
 }
 
-// The query is matched as a literal, so the escaped `gi` regex is exactly the
-// case-insensitive substring test the filter runs — highlighting and replacing can
-// never disagree with what the list decided to show. A fresh regex per call keeps
-// `lastIndex` from leaking between uses.
-function searchRegex() {
-  const q = document.getElementById("q").value.trim();
+function queryText() {
+  return document.getElementById("q").value.trim();
+}
+
+function caseSensitive() {
+  return document.getElementById("caseToggle").getAttribute("aria-pressed") === "true";
+}
+
+// The query is matched as a literal, so filtering, highlighting and replacing all
+// come from one escaped regex and can never disagree about what counts as a match.
+function buildRegex(flags) {
+  const q = queryText();
   if (!q) return null;
-  return new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+  return new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), caseSensitive() ? flags : flags + "i");
+}
+
+// Global, so it walks every occurrence. A fresh regex per call keeps `lastIndex`
+// from leaking between uses.
+function searchRegex() {
+  return buildRegex("g");
+}
+
+// Not global, so `.test()` is stateless and one regex can be reused down the rows.
+function filterRegex() {
+  return buildRegex("");
 }
 
 function computeMatches() {
   const re = searchRegex();
-  const key = re ? re.source : null;
+  // Includes the flags, so toggling Match case restarts at the first match rather
+  // than holding a position in a match list that has changed underneath it.
+  const key = re ? String(re) : null;
 
   matches = [];
   if (re) {
@@ -103,8 +122,8 @@ function computeMatches() {
 }
 
 function applyFilter() {
-  const q = document.getElementById("q").value.trim().toLowerCase();
-  filtered = q ? rows.filter(r => (r.text || "").toLowerCase().includes(q)) : rows.slice();
+  const re = filterRegex();
+  filtered = re ? rows.filter(r => re.test(r.text || "")) : rows.slice();
   lastClickedPos = null;
   computeMatches();
   render();
@@ -450,6 +469,12 @@ function setReplaceOpen(open) {
 
 document.getElementById("toggleReplace").addEventListener("click", () => {
   setReplaceOpen(document.getElementById("replaceRow").hidden);
+});
+
+document.getElementById("caseToggle").addEventListener("click", (e) => {
+  const on = e.currentTarget.getAttribute("aria-pressed") === "true";
+  e.currentTarget.setAttribute("aria-pressed", String(!on));
+  applyFilter();
 });
 
 document.getElementById("prevMatch").addEventListener("click", () => gotoMatch(-1));
