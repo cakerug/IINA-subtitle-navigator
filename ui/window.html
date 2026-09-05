@@ -35,11 +35,14 @@
   </div>
 
   <div class="toolbar2">
+    <button id="undo" title="Undo (⌘Z)" disabled>Undo</button>
+    <button id="redo" title="Redo (⇧⌘Z)" disabled>Redo</button>
+    <span class="sep"></span>
     <button id="scrollCurrent">Scroll to Current</button>
     <label class="chk"><input type="checkbox" id="autoScrollToggle"> Auto-scroll</label>
   </div>
 
-  <div class="hint">Right-click a line for edit, jump, loop and copy actions. While editing: Enter commits, Shift+Enter adds a newline, Escape cancels.</div>
+  <div class="hint">Right-click a line for edit, jump, loop and copy actions. While editing: Enter commits, Shift+Enter adds a newline, Escape cancels. ⌘Z undoes edits and replacements.</div>
 
   <div id="notice" class="notice" hidden></div>
   <div id="meta" class="meta"></div>

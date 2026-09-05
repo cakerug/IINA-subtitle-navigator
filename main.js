@@ -192,7 +192,7 @@ function buildRows() {
 
 function postRows(meta) {
   rows = buildRows();
-  post("setRows", { rows, meta: { count: rows.length, dirty: edits.size, ...(meta || {}) } });
+  post("setRows", { rows, meta: { count: rows.length, dirty: edits.size, path: srcPath, ...(meta || {}) } });
 }
 
 function getSubDelay() {
@@ -471,18 +471,23 @@ standaloneWindow.onMessage("loopLine", (data) => {
   }
 });
 
-standaloneWindow.onMessage("editRow", (data) => {
-  const id = Number(data?.id);
-  const text = String(data?.text ?? "");
-  if (!Number.isInteger(id) || !cues[id]) return;
-  if (isBlank(text)) {
-    post("notice", { ok: false, message: "Subtitle text cannot be empty" });
-    postRows();
-    return;
+// Takes a list rather than a single row so Replace All and undo cost one re-render
+// and one autosave, not one of each per line they touch.
+standaloneWindow.onMessage("editRows", (data) => {
+  const incoming = Array.isArray(data?.edits) ? data.edits : [];
+  let rejected = 0;
+
+  for (const e of incoming) {
+    const id = Number(e?.id);
+    const text = String(e?.text ?? "");
+    if (!Number.isInteger(id) || !cues[id]) continue;
+    if (isBlank(text)) { rejected++; continue; }
+    const next = text.replace(/\r/g, "").replace(/\n{2,}/g, "\n").trim();
+    if (next === cues[id].text) edits.delete(id);
+    else edits.set(id, next);
   }
-  const next = text.replace(/\r/g, "").replace(/\n{2,}/g, "\n").trim();
-  if (next === cues[id].text) edits.delete(id);
-  else edits.set(id, next);
+
+  if (rejected) post("notice", { ok: false, message: "Subtitle text cannot be empty" });
   postRows();
   scheduleAutosave();
 });

@@ -119,33 +119,50 @@ Marked lines are assembled from text nodes and `<mark>` elements rather than
 
 `matches` is a flat list of every occurrence in list order, rebuilt by
 `computeMatches()` on any change to the query, the case flag or the rows; `matchIdx` names the one
-`mark.active` colours and Replace acts on. There is deliberately no Replace All: the
-only undo is the `.bak` copy of the whole file, so each replacement is one the user
-has just seen highlighted. A replacement that would empty a cue is refused rather
-than sent, since `editRow` rejects blank text — the list must never show text the
-file will not have.
+`mark.active` colours and Replace acts on. A replacement that would empty a cue is
+refused rather than sent, since `main.js` rejects blank text — the list must never
+show text the file will not have.
 
 Three cursors move independently: `currentIdx` is where the video is (the blue row),
 `selected` is what was clicked, and `matchIdx` is the find cursor. Clicking a row
 moves the find cursor onto it, so Replace acts on the line being pointed at.
 Playback deliberately does not: the find cursor is an editing position, and letting
-it drift with the video would make Replace a moving target on a feature whose only
-undo is the `.bak` file. Following playback is what Auto-scroll and Scroll to
-Current are for.
+it drift with the video would make Replace a moving target. Following playback is
+what Auto-scroll and Scroll to Current are for.
 
 After a replacement `resumeAt` records the position just past the inserted text, and
 `computeMatches()` lands `matchIdx` on the first match at or after it. Without that,
 replacing `world` with `the world` would leave the cursor sitting on the match it had
 just created.
 
-Nothing about replace reaches `main.js`: a replacement is an ordinary `editRow`, so
+Nothing about replace reaches `main.js`: a replacement is an ordinary `editRows`, so
 it inherits the same debounced write, rollback and re-render as a hand edit.
+
+### Undo
+
+`undoStack` and `redoStack` live in the WebView. An entry is one user action — a hand
+edit, a single replacement, a Replace All — holding a label for the notice and the
+`before`/`after` text of every row it touched. `applyChanges(changes, key)` picks a
+side and applies it, so undo and redo are one walk in opposite directions.
+
+Changes go out as a single `editRows` message rather than one per line: a Replace All
+across a few hundred cues would otherwise cost that many re-renders and autosave
+reschedules. Row ids are cue indices and a save only rewrites cue *text*, so the cue
+count — and therefore every id — survives the round trip and the stacks stay valid
+across saves. Loading a different `.srt` does invalidate them, so `setRows` compares
+`meta.path` against the path the stacks were built on and drops them when it changes.
+
+Undo is a session-level history of actions; the `.srt.bak` backup is still the
+separate, coarser escape hatch that holds the file as it was before the first write.
+
+`⌘Z` is ignored while focus is in a text field, so the search box, the replace box and
+an open editor keep their own native undo.
 
 ## Message inventory
 
 UI → main: `uiReady`, `windowClosed`, `setSelection`, `seekTo`,
 `scrollToCurrent`, `loopLine`, `reload`, `copyFallback`
-— plus, added for editing: `editRow`.
+— plus, added for editing: `editRows`.
 
 The row context menu is drawn in the WebView rather than by AppKit: the UI has no
 menu API, and `contextmenu` is suppressed document-wide so WebKit's own menu

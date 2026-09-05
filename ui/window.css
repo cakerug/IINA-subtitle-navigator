@@ -132,6 +132,13 @@ body {
     color: #fff;
 }
 
+.toolbar2 .sep {
+    width: 1px;
+    align-self: stretch;
+    margin: 2px 2px;
+    background: rgba(127, 127, 127, 0.3);
+}
+
 .lbl {
     font-size: 12px;
     opacity: 0.8;

@@ -74,6 +74,9 @@ This project is intended to be:
   编辑时 `Enter` 确认，`Shift+Enter` 换行，`Escape` 取消
 - `Cmd+Enter` edits the line playing right now  
   `Cmd+Enter` 直接编辑当前播放行
+- **Undo and redo** with `⌘Z` / `⇧⌘Z`, or the toolbar buttons. One step is one
+  action, so a Replace All across a hundred lines undoes in a single press  
+  `⌘Z` / `⇧⌘Z` 撤销与重做；一次「全部替换」也只需按一次即可撤销
 - **Saving is invisible.** There is no dirty marker and no Save step: an edit is
   written to the `.srt` shortly after you stop typing, and the subtitle track
   reloads so the fix shows up in playback  
@@ -192,8 +195,11 @@ You are encouraged to:
 - Single subtitle track by design
 - Editing changes subtitle **text** only — timestamps are not editable
 - Saving normalizes CRLF line endings to LF
-- Edits are written without confirmation; the `.srt.bak` backup is the undo of
-  last resort, and it holds the original file rather than the previous save
+- Edits are written without confirmation. `⌘Z` undoes them within the session; the
+  `.srt.bak` backup is the escape hatch of last resort, and it holds the original
+  file rather than the previous save
+- The undo history is per session and per file: closing the window or switching
+  subtitle track clears it
 
 ---
 

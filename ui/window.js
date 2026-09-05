@@ -25,6 +25,15 @@ let matchQuery = null;
 // the world) from parking the cursor back on the match it just made.
 let resumeAt = null;
 
+// Each entry is one user action: a label for the notice, and the before/after text
+// of every row it touched. Undo and redo walk the same list in opposite directions.
+const UNDO_LIMIT = 100;
+let undoStack = [];
+let redoStack = [];
+// The .srt the stacks belong to. Undoing into a file the text never came from would
+// write the wrong lines, so loading another one drops them.
+let loadedPath = null;
+
 let noticeTimer = null;
 
 function fmt(t) {
@@ -155,9 +164,11 @@ function commitEdit(ta, id) {
 
   const next = normalizeText(value);
   const row = rows.find(r => r.id === id);
-  if (row) { row.text = next; row.dirty = true; }
-  iina.postMessage("editRow", { id, text: next });
-  render();
+  if (!row || next === row.text) { render(); return true; }
+
+  const changes = [{ id, before: row.text, after: next }];
+  pushUndo("the edit", changes);
+  applyChanges(changes, "after");
   return true;
 }
 
@@ -413,6 +424,63 @@ function selectedRows() {
   return rows.filter(r => selected.has(r.id)).sort((a, b) => a.start - b.start);
 }
 
+/** Undo */
+
+// `key` picks which side of each change to apply, so one walk serves undo and redo.
+// Edits go to the rows for the list and to main.js for the file in a single batch,
+// which is one re-render and one autosave however many lines the action touched.
+function applyChanges(changes, key) {
+  const byId = new Map(rows.map(r => [r.id, r]));
+  const edits = [];
+  for (const c of changes) {
+    const row = byId.get(c.id);
+    if (!row) continue;
+    row.text = c[key];
+    row.dirty = true;
+    edits.push({ id: c.id, text: c[key] });
+  }
+  if (edits.length) iina.postMessage("editRows", { edits });
+  applyFilter();
+}
+
+function pushUndo(label, changes) {
+  undoStack.push({ label, changes });
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+  redoStack = [];
+  updateUndoState();
+}
+
+function clearUndo() {
+  undoStack = [];
+  redoStack = [];
+  updateUndoState();
+}
+
+function updateUndoState() {
+  document.getElementById("undo").disabled = !undoStack.length;
+  document.getElementById("redo").disabled = !redoStack.length;
+}
+
+// Puts the first line an undo touched back on screen, so a stack entry from far up
+// the file is something the user sees rather than has to go looking for.
+function revealRow(id) {
+  const pos = filtered.findIndex(r => r.id === id);
+  if (pos >= 0) scrollToIndex(pos);
+}
+
+function step(from, to, key, verb) {
+  const entry = from.pop();
+  if (!entry) return;
+  to.push(entry);
+  applyChanges(entry.changes, key);
+  updateUndoState();
+  showNotice(`${verb} ${entry.label}.`);
+  revealRow(entry.changes[0]?.id);
+}
+
+function undo() { step(undoStack, redoStack, "before", "Undid"); }
+function redo() { step(redoStack, undoStack, "after", "Redid"); }
+
 function updateFindState() {
   const has = matches.length > 0;
   document.getElementById("matchCount").textContent =
@@ -435,16 +503,15 @@ function scrollToMatch() {
   if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
-// One match at a time, deliberately: there is no undo, so every replacement is a
-// change the user has just looked at in the list.
 function replaceCurrent() {
   const m = matches[matchIdx];
   if (!m) return;
   const row = rows.find(r => r.id === m.id);
   if (!row) return;
 
+  const repl = document.getElementById("replaceWith").value;
   const text = row.text || "";
-  const next = normalizeText(text.slice(0, m.start) + document.getElementById("replaceWith").value + text.slice(m.end));
+  const next = normalizeText(text.slice(0, m.start) + repl + text.slice(m.end));
   // Replacing a match with itself would otherwise leave the cursor where it was and
   // make the button look dead.
   if (next === text) { gotoMatch(1); return; }
@@ -453,12 +520,10 @@ function replaceCurrent() {
     return;
   }
 
-  row.text = next;
-  row.dirty = true;
-  iina.postMessage("editRow", { id: m.id, text: next });
-
-  resumeAt = { time: m.time, offset: m.start + document.getElementById("replaceWith").value.length };
-  applyFilter();
+  const changes = [{ id: m.id, before: text, after: next }];
+  pushUndo("the replacement", changes);
+  resumeAt = { time: m.time, offset: m.start + repl.length };
+  applyChanges(changes, "after");
   scrollToMatch();
 }
 
@@ -489,6 +554,8 @@ document.getElementById("caseToggle").addEventListener("click", (e) => {
 document.getElementById("prevMatch").addEventListener("click", () => gotoMatch(-1));
 document.getElementById("nextMatch").addEventListener("click", () => gotoMatch(1));
 document.getElementById("replaceOne").addEventListener("click", replaceCurrent);
+document.getElementById("undo").addEventListener("click", undo);
+document.getElementById("redo").addEventListener("click", redo);
 
 function isPlainEnter(e) {
   return e.key === "Enter" && !e.metaKey && !e.ctrlKey;
@@ -533,6 +600,12 @@ document.addEventListener("contextmenu", (e) => { e.preventDefault(); closeConte
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeContextMenu();
+  // Inside a text field ⌘Z belongs to the field's own undo, not the edit history.
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z"
+      && !/^(INPUT|TEXTAREA)$/.test(e.target?.tagName || "")) {
+    e.preventDefault();
+    if (e.shiftKey) redo(); else undo();
+  }
   // Edit the line that is playing right now, without reaching for the mouse.
   if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && currentIdx >= 0) {
     e.preventDefault();
@@ -550,6 +623,9 @@ iina.onMessage("setTracks", (data) => {
 
 iina.onMessage("setRows", ({ rows: r, meta }) => {
   rows = Array.isArray(r) ? r : [];
+
+  const path = meta?.path ?? null;
+  if (path !== loadedPath) { loadedPath = path; clearUndo(); }
 
   const liveIds = new Set(rows.map(x => x.id));
   for (const id of [...selected]) if (!liveIds.has(id)) selected.delete(id);
