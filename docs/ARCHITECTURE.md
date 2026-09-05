@@ -125,6 +125,14 @@ has just seen highlighted. A replacement that would empty a cue is refused rathe
 than sent, since `editRow` rejects blank text — the list must never show text the
 file will not have.
 
+Three cursors move independently: `currentIdx` is where the video is (the blue row),
+`selected` is what was clicked, and `matchIdx` is the find cursor. Clicking a row
+moves the find cursor onto it, so Replace acts on the line being pointed at.
+Playback deliberately does not: the find cursor is an editing position, and letting
+it drift with the video would make Replace a moving target on a feature whose only
+undo is the `.bak` file. Following playback is what Auto-scroll and Scroll to
+Current are for.
+
 After a replacement `resumeAt` records the position just past the inserted text, and
 `computeMatches()` lands `matchIdx` on the first match at or after it. Without that,
 replacing `world` with `the world` would leave the cursor sitting on the match it had

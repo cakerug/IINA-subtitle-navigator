@@ -372,6 +372,15 @@ function render() {
         loopingId = r.id;
         iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
       }
+
+      // Clicking a row moves the find cursor onto it, so Replace acts on the line
+      // being pointed at. A row already holding the cursor is left alone, so
+      // clicking around does not walk the cursor through a multi-match line.
+      if (matches.length && matches[matchIdx]?.id !== r.id) {
+        const i = matches.findIndex(m => m.id === r.id);
+        if (i >= 0) { matchIdx = i; updateFindState(); }
+      }
+
       render();
     });
 
