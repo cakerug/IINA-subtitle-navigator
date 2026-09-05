@@ -97,8 +97,19 @@ rather than replacing it.
 ### Build from source
 
 ```bash
-./scripts/build-plugin.sh    # -> dist/SubtitleNavigator-<version>.iinaplgz
+./scripts/build.sh    # -> dist/SubtitleNavigator-<version>.iinaplgz
 ```
+
+The release workflow runs this same script, so a local build matches a released one.
+
+### Develop
+
+```bash
+./scripts/dev.sh             # IINA loads this working copy directly
+./scripts/dev.sh --unlink    # stop loading it
+```
+
+Reload the plugin in IINA to pick up edits. No rebuild or reinstall.
 
 ---
 

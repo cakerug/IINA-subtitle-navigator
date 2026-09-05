@@ -9,6 +9,7 @@ on:
       - "Info.json"
       - "main.js"
       - "ui/**"
+      - "scripts/build.sh"
       - ".github/workflows/release.yml"
   workflow_dispatch: {}
 
@@ -23,12 +24,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate plugin structure
-        run: |
-          test -f Info.json
-          test -f main.js
-          test -d ui
-
       - name: Read version from Info.json
         id: ver
         run: |
@@ -36,9 +31,7 @@ jobs:
 
       - name: Package .iinaplgz
         run: |
-          mkdir -p dist
-          OUT="SubtitleNavigator_v${{ steps.ver.outputs.version }}.iinaplgz"
-          zip -r "dist/${OUT}" Info.json main.js ui
+          ./scripts/build.sh
           ls -lah dist
 
       - name: Create Release and upload asset
