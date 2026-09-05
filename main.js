@@ -235,7 +235,7 @@ async function refresh(force = false) {
 
   if (!trackId) {
     cues = []; rows = []; srcLines = []; srcPath = "";
-    post("setRows", { rows: [], meta: { error: "No external subtitle tracks with filename suffix found. Please load external subtitles in IINA." } });
+    post("setRows", { rows: [], meta: { error: "No subtitle selected" } });
     return;
   }
 
