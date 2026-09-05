@@ -157,12 +157,30 @@ button {
     align-items: center;
 }
 
-.meta {
+.statusRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     margin: 10px 0;
+    flex-shrink: 0;
+}
+
+.meta {
     opacity: 0.75;
     font-size: 12px;
     word-break: break-all;
-    flex-shrink: 0;
+}
+
+/* Takes the row's slack, so the pair sits against the right edge whether or not
+   the row count beside it is showing. */
+#undo {
+    margin-left: auto;
+}
+
+#undo,
+#redo {
+    padding: 3px 10px;
+    font-size: 12px;
 }
 
 .empty {

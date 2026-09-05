@@ -13,8 +13,6 @@
       <select id="track"></select>
     </div>
     <button id="reload">Reload</button>
-    <button id="undo" title="Undo (⌘Z)" disabled>Undo</button>
-    <button id="redo" title="Redo (⇧⌘Z)" disabled>Redo</button>
     <span class="help">
       <button class="helpBtn" aria-describedby="helpTip">?</button>
       <span class="helpTip" id="helpTip" role="tooltip">
@@ -46,7 +44,11 @@
   </div>
 
   <div id="notice" class="notice" hidden></div>
-  <div id="meta" class="meta"></div>
+  <div class="statusRow">
+    <div id="meta" class="meta"></div>
+    <button id="undo" title="Undo (⌘Z)" disabled>Undo</button>
+    <button id="redo" title="Redo (⇧⌘Z)" disabled>Redo</button>
+  </div>
   <div id="list" class="list"></div>
 
   <div class="toolbar bottomBar">
