@@ -104,10 +104,6 @@ rather than replacing it.
 
 ## 🚀 Usage
 
-### Demo
-
-https://github.com/user-attachments/assets/59d68ece-2736-4c01-a10f-d4906d04145e
-
 ### Reopen the window
 If you close it:
 
