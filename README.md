@@ -1,198 +1,129 @@
 # Subtitle Navigator for IINA
 
-A standalone subtitle navigation and learning tool for **IINA** on macOS.  
-Designed for language learners who want **precise subtitle browsing, jumping, looping, and copying**.
-
-一个基于 **IINA（macOS）** 的 **独立窗口字幕浏览与学习插件**，专为语言学习场景设计，支持精确跳转、循环、搜索和复制字幕。
+A standalone window for browsing, searching and **editing** subtitles in **IINA** on macOS.
 
 ---
 
-## ⚠️ Project Status / 项目说明（请先阅读）
+## ⚠️ About this fork — please read
 
-### English
-This project was created using **GPT-5.2 vibe coding** as an exploratory and practical experiment.
+This is a fork of [CoderChen01/IINA-subtitle-navigator](https://github.com/CoderChen01/IINA-subtitle-navigator),
+which was built as a **language-learning** tool.
 
-- The code works and is actively used by the author.
-- **There is no guarantee of long-term maintenance.**
-- This repository is provided **as-is**.
-- You are **strongly encouraged to fork, modify, and customize** it for your own needs.
+**This fork is not aimed at language learning.** I use it to read and repair subtitle
+files. I have not removed any of the original's learning features — line looping,
+copy-to-notes, the sub-delay compensation — but I don't use them, and I haven't
+tested them. Treat those as inherited rather than supported.
 
-This project is intended to be:
-- A **useful reference implementation**
-- A **starting point** for your own IINA subtitle tools
-- A practical example of what GPT-assisted development can produce
+Like the original, this is provided **as-is** with no promise of maintenance.
 
-### 中文
-本项目是一个基于 **GPT-5.2 vibe coding** 完成的实验性 / 实用性项目。
+### What's different from the original
 
-- 插件功能完整，可正常使用
-- **不承诺长期维护**
-- 本仓库以 **“现状提供（as-is）”**
-- **非常欢迎 Fork、本地修改、二次定制**
-
-本项目的定位是：
-- 一个**可直接使用的工具**
-- 一个**IINA 插件开发参考实现**
-- 一个 **GPT 辅助开发的真实示例**
+- **Subtitle editing.** Edit any line in place and it is written back to the `.srt`.
+  Saving happens on its own, edits are undoable, and find & replace works across the
+  whole file.
+- **A restructured interface.** Row actions moved onto a right-click context menu,
+  buttons that duplicated what IINA already does were dropped, and what remains is
+  grouped by what it acts on — the file, the search, the list, playback.
 
 ---
 
-## ✨ Features | 功能特性
+## ✨ Features
 
-### Core Features | 核心功能
-- **Standalone Window** (not sidebar)  
-  独立窗口显示，不占用 IINA 侧边栏空间
-- **Select subtitle track** (external subtitles)  
-  选择外挂字幕轨（`.srt`）
+### Core
+- **Standalone window**, not a sidebar panel
+- **Select subtitle track** (external `.srt`)
 - **Robust SRT parsing**
-  - Supports `,` and `.` millisecond formats  
-  - Handles irregular spacing and BOM  
+  - Supports `,` and `.` millisecond formats
+  - Handles irregular spacing and BOM
   - Removes style tags like `{...}`
-- **Filter non-dialog overlays**  
-  Automatically removes top-of-screen annotation subtitles  
-  （如 `{\an7}`, `{\an8}`, `{\an9}`）
+- **Filters non-dialog overlays** — top-of-screen annotations such as `{\an7}`, `{\an8}`, `{\an9}`
 
----
+### Navigation
+- **Clickable subtitle list** — click a line to jump there
+- **Scroll to current subtitle**, and an optional auto-scroll that follows playback
+- **Loop a line** from the right-click menu, until you stop it there
+- **Search subtitles**, with an `Aa` match-case toggle and match highlighting
+- **Replace** one match at a time, or **All** at once
+- **Multi-select**, then right-click the selection to copy every line at once
 
-### Navigation & Learning | 跳转与学习
-- **Clickable subtitle list**  
-  点击字幕即可跳转
-- **Scroll to current subtitle**  
-  滚动到当前播放行
-- **Loop a line** from the right-click menu, until you stop it there  
-  右键菜单开启单句循环，再次右键该行可停止
-- **Search subtitles**, with a `Aa` match-case toggle  
-  搜索字幕，可切换区分大小写
-- **Replace** one match at a time, or **All** at once  
-  可逐条替换，也可一次性全部替换
-- **Multi-select**, then right-click the selection to copy every line at once  
-  多选后右键可一次性复制所选各行
-
----
-
-### Editing | 字幕编辑
-- **Right-click a line for a context menu**: edit, jump, loop, copy  
-  右键点击字幕行弹出菜单：编辑、跳转、循环、复制
-- While editing, `Enter` commits, `Shift+Enter` adds a newline, `Escape` cancels  
-  编辑时 `Enter` 确认，`Shift+Enter` 换行，`Escape` 取消
-- `Cmd+Enter` edits the line playing right now  
-  `Cmd+Enter` 直接编辑当前播放行
+### Editing
+- **Right-click a line for a context menu**: edit, jump, loop, copy
+- While editing, `Enter` commits, `Shift+Enter` adds a newline, `Escape` cancels
+- `Cmd+Enter` edits the line playing right now
 - **Undo and redo** with `⌘Z` / `⇧⌘Z`, or the toolbar buttons. One step is one
-  action, so a Replace All across a hundred lines undoes in a single press  
-  `⌘Z` / `⇧⌘Z` 撤销与重做；一次「全部替换」也只需按一次即可撤销
+  action, so a Replace All across a hundred lines undoes in a single press
 - **Saving is invisible.** There is no dirty marker and no Save step: an edit is
   written to the `.srt` shortly after you stop typing, and the subtitle track
-  reloads so the fix shows up in playback  
-  无需手动保存，也没有“未保存”状态：停止输入后自动写回 `.srt` 并重载字幕轨
-- A run of edits batches into **one** write and **one** reload  
-  连续编辑会合并为一次写入与一次重载
+  reloads so the fix shows up in playback
+- A run of edits batches into **one** write and **one** reload
 - **If a save fails, the line reverts** to what the file actually contains, and the
   discarded text is shown so you can type it back in — the list never claims an
-  edit the `.srt` does not have  
-  保存失败时该行会回退到文件中的实际内容，并显示被放弃的文本
+  edit the `.srt` does not have
 - **A backup is made before the first write**: `yourfile.srt` → `yourfile.srt.bak`,
-  and it keeps the pristine original even across sessions  
-  首次写入前会自动备份为 `yourfile.srt.bak`，且始终保留最初的原始版本
-- Writes are **atomic** — the file is replaced by rename, never truncated in place  
-  写入是原子的：通过重命名替换文件，不会就地截断
+  and it keeps the pristine original even across sessions
+- Writes are **atomic** — the file is replaced by rename, never truncated in place
 
 Only the lines you actually edit are rewritten. Everything else in the file —
 cue numbering, timestamp formatting, style tags, and any cues the parser skips —
 is preserved exactly as it was.
 
-只有被编辑的行会被改写，文件中的其他内容（序号、时间戳格式、样式标签等）保持原样。
-
 > Editing a line that contained `{...}` style tags drops those tags from that line,
 > because the editor works on the cleaned text the list displays.
 
----
-
-### Timing Accuracy | 时间精准度
-- Automatically compensates **mpv `sub-delay`**  
-  字幕列表、跳转、循环与屏幕字幕同步
-- Optimized for **long videos (hours+)**
+### Timing
+- Automatically compensates **mpv `sub-delay`**
+- Built for **long videos (hours+)**
 
 ---
 
-## 📦 Installation | 安装方式
+## 📦 Installation
 
-### Requirements | 运行要求
+### Requirements
 - macOS
 - **IINA ≥ 1.4**
 - mpv ≥ 0.38
 - External subtitles (`.srt`)
 
-### Install Plugin | 安装插件
+### Install
 1. Download the latest `.iinaplgz` from **Releases**
 2. Open IINA → **Plugins** → **Install Plugin…**
 3. Enable the plugin
 
-插件启用后会**自动打开独立窗口**。
+The window opens automatically once the plugin is enabled.
 
-### Build from source | 从源码构建
+This fork uses its own plugin identifier, so it installs alongside the original
+rather than replacing it.
+
+### Build from source
 
 ```bash
-./scripts/build-plugin.sh          # release build -> dist/
-./scripts/build-plugin.sh --dev    # dev build, installs alongside the release
+./scripts/build-plugin.sh    # -> dist/SubtitleNavigator-<version>.iinaplgz
 ```
-
-The `--dev` build gets its own plugin identifier, name and menu shortcut
-(`Cmd+Shift+D`), so IINA treats it as a separate plugin and you can enable it
-next to the released one to compare the two.
-
-`--dev` 构建使用独立的标识符、名称与快捷键，可与正式版同时启用，方便对比。
 
 ---
 
-## 🚀 Usage | 使用说明
+## 🚀 Usage
 
-### Demo | 演示视频
+### Demo
 
 https://github.com/user-attachments/assets/59d68ece-2736-4c01-a10f-d4906d04145e
 
-### Reopen the window | 重新打开窗口
-If you close the window:
+### Reopen the window
+If you close it:
 
 - **Menu**: `IINA → Plugins → Show Subtitle Navigator`
 - **Shortcut**: `Cmd + Shift + S`
 
----
-
-### Typical Language Learning Workflow | 典型学习流程
-1. Load a video with subtitles
+### Typical workflow
+1. Load a video with external `.srt` subtitles
 2. Open Subtitle Navigator
-3. Search unfamiliar lines
-4. Jump → loop → repeat
-5. Right-click → **Edit text** to fix any mis-transcribed line; it saves itself
-6. Copy useful sentences to notes / Anki
+3. Search for the line you want
+4. Right-click → **Edit text** to fix it, or use **Replace** to fix it everywhere
+5. It saves itself — `⌘Z` if you change your mind
 
 ---
 
-## 🧠 Design Philosophy | 设计理念
-
-- Treat subtitles as **learning material**
-- Prefer **robustness and accuracy** over visual complexity
-- Avoid IINA sidebar limitations
-
-这是一个**字幕学习工具**，而不是单纯的字幕显示插件。
-
----
-
-## 🛠 Customization & Forking | 定制与二次开发
-
-You are encouraged to:
-- Fork this repository
-- Modify UI / parsing / timing logic
-- Adapt it to your personal workflow
-
-欢迎基于本项目进行：
-- UI 改造
-- 支持更多字幕格式
-- 更复杂的语言学习功能
-
----
-
-## ⚠️ Limitations | 已知限制
+## ⚠️ Limitations
 - Only `.srt` supported
 - Embedded subtitles not parsed as text
 - Single subtitle track by design
@@ -203,17 +134,19 @@ You are encouraged to:
   file rather than the previous save
 - The undo history is per session and per file: closing the window or switching
   subtitle track clears it
+- The language-learning features inherited from the original are untested here
 
 ---
 
-## 📄 License | 许可证
+## 📄 License
 
 MIT License
 
 ---
 
-## 🙏 Acknowledgements | 致谢
+## 🙏 Acknowledgements
+- **[CoderChen01/IINA-subtitle-navigator](https://github.com/CoderChen01/IINA-subtitle-navigator)**
+  by Junjie Chen — the original plugin this is forked from. The subtitle list,
+  SRT parsing, looping and timing work are theirs.
 - IINA team
 - mpv project
-- GPT-5.2
-- Language learners who want better subtitle tools
