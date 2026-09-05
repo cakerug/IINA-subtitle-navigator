@@ -61,7 +61,10 @@ This project is intended to be:
   滚动到当前播放行
 - **Loop a line** from the right-click menu, until you stop it there  
   右键菜单开启单句循环，再次右键该行可停止
-- **Search subtitles**
+- **Search subtitles**, with a `Aa` match-case toggle  
+  搜索字幕，可切换区分大小写
+- **Replace** one match at a time, or **All** at once  
+  可逐条替换，也可一次性全部替换
 - **Multi-select**, then right-click the selection to copy every line at once  
   多选后右键可一次性复制所选各行
 

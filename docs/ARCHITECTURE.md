@@ -119,9 +119,13 @@ Marked lines are assembled from text nodes and `<mark>` elements rather than
 
 `matches` is a flat list of every occurrence in list order, rebuilt by
 `computeMatches()` on any change to the query, the case flag or the rows; `matchIdx` names the one
-`mark.active` colours and Replace acts on. A replacement that would empty a cue is
-refused rather than sent, since `main.js` rejects blank text — the list must never
-show text the file will not have.
+`mark.active` colours and Replace acts on. Replace All walks `filtered` instead —
+which, since the query is also the filter, is every row that contains it. It passes
+a replacer *function* to `String.replace`, so `$&` and friends typed into the Replace
+box stay literal rather than becoming substitution patterns. A replacement that would
+empty a cue is dropped rather than sent, since `main.js` rejects blank text — the list
+must never show text the file will not have — and the notice says how many lines were
+left alone.
 
 Three cursors move independently: `currentIdx` is where the video is (the blue row),
 `selected` is what was clicked, and `matchIdx` is the find cursor. Clicking a row

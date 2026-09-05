@@ -485,7 +485,7 @@ function updateFindState() {
   const has = matches.length > 0;
   document.getElementById("matchCount").textContent =
     !searchRegex() ? "" : (has ? `${matchIdx + 1} of ${matches.length}` : "No results");
-  for (const id of ["prevMatch", "nextMatch", "replaceOne"]) {
+  for (const id of ["prevMatch", "nextMatch", "replaceOne", "replaceAll"]) {
     document.getElementById(id).disabled = !has;
   }
 }
@@ -503,13 +503,17 @@ function scrollToMatch() {
   if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
+function replacement() {
+  return document.getElementById("replaceWith").value;
+}
+
 function replaceCurrent() {
   const m = matches[matchIdx];
   if (!m) return;
   const row = rows.find(r => r.id === m.id);
   if (!row) return;
 
-  const repl = document.getElementById("replaceWith").value;
+  const repl = replacement();
   const text = row.text || "";
   const next = normalizeText(text.slice(0, m.start) + repl + text.slice(m.end));
   // Replacing a match with itself would otherwise leave the cursor where it was and
@@ -525,6 +529,45 @@ function replaceCurrent() {
   resumeAt = { time: m.time, offset: m.start + repl.length };
   applyChanges(changes, "after");
   scrollToMatch();
+}
+
+function plural(n, word, many = word + "s") {
+  return `${n} ${n === 1 ? word : many}`;
+}
+
+function replaceAll() {
+  if (!matches.length) return;
+  const repl = replacement();
+
+  const changes = [];
+  let count = 0;
+  let emptied = 0;
+
+  for (const row of filtered) {
+    const text = row.text || "";
+    let hits = 0;
+    // A replacer function rather than a string, so `$&` and friends typed into the
+    // Replace box stay literal instead of turning into substitution patterns.
+    const next = normalizeText(text.replace(searchRegex(), () => { hits++; return repl; }));
+    if (next === text) continue;
+    // main.js rejects blank text, so these are dropped here rather than sent and
+    // bounced back — the list must never show text the file will not have.
+    if (next === "") { emptied++; continue; }
+    changes.push({ id: row.id, before: text, after: next });
+    count += hits;
+  }
+
+  if (!changes.length) {
+    showNotice(emptied
+      ? `Nothing replaced: ${plural(emptied, "line")} would have been left empty. Edit those lines instead.`
+      : "Nothing to replace.", emptied ? "error" : "info");
+    return;
+  }
+
+  pushUndo(plural(count, "replacement"), changes);
+  applyChanges(changes, "after");
+  showNotice(`Replaced ${plural(count, "match", "matches")} in ${plural(changes.length, "line")}.`
+    + (emptied ? ` Left ${plural(emptied, "line")} alone, which the replacement would have emptied.` : ""));
 }
 
 function scrollToIndex(idx) {
@@ -554,6 +597,7 @@ document.getElementById("caseToggle").addEventListener("click", (e) => {
 document.getElementById("prevMatch").addEventListener("click", () => gotoMatch(-1));
 document.getElementById("nextMatch").addEventListener("click", () => gotoMatch(1));
 document.getElementById("replaceOne").addEventListener("click", replaceCurrent);
+document.getElementById("replaceAll").addEventListener("click", replaceAll);
 document.getElementById("undo").addEventListener("click", undo);
 document.getElementById("redo").addEventListener("click", redo);
 
