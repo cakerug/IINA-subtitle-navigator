@@ -295,11 +295,59 @@ mark.active {
     }
 }
 /* --- 编辑功能样式 --- */
-.hint {
-    margin-top: 8px;
+/* --- 帮助提示 --- */
+/* Pushed to the far end of the toolbar, away from the track controls. */
+.help {
+    position: relative;
+    margin-left: auto;
+    display: inline-flex;
+}
+
+.helpBtn {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 12px;
+    line-height: 1;
+    opacity: 0.7;
+    cursor: help;
+}
+
+.help:hover .helpBtn {
+    opacity: 1;
+}
+
+.helpTip {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    z-index: 90;
+    width: 300px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    border: 1px solid rgba(127, 127, 127, 0.3);
+    background: Canvas;
+    box-shadow: 0 6px 22px rgba(0, 0, 0, 0.28);
+    font-size: 12px;
+    line-height: 1.5;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.12s;
+}
+
+.help:hover .helpTip,
+.helpBtn:focus-visible+.helpTip {
+    opacity: 1;
+    visibility: visible;
+}
+
+.helpTip kbd {
+    font: inherit;
     font-size: 11px;
-    opacity: 0.6;
-    flex-shrink: 0;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(127, 127, 127, 0.22);
 }
 
 .notice {

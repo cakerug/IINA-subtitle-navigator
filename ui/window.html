@@ -13,6 +13,14 @@
       <select id="track"></select>
     </div>
     <button id="reload">Reload</button>
+    <span class="help">
+      <button class="helpBtn" aria-describedby="helpTip">?</button>
+      <span class="helpTip" id="helpTip" role="tooltip">
+        <b>Right-click a line</b> for edit, jump, loop and copy actions.<br />
+        While editing: <kbd>Enter</kbd> commits, <kbd>Shift</kbd>+<kbd>Enter</kbd> adds a newline,
+        <kbd>Esc</kbd> cancels.
+      </span>
+    </span>
   </div>
 
   <section class="editBar">
@@ -42,8 +50,6 @@
       </div>
     </div>
   </section>
-
-  <div class="hint">Right-click a line for edit, jump, loop and copy actions. While editing: Enter commits, Shift+Enter adds a newline, Escape cancels.</div>
 
   <div id="notice" class="notice" hidden></div>
   <div id="meta" class="meta"></div>
