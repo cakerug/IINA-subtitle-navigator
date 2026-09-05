@@ -8,14 +8,13 @@
     display: none !important;
 }
 
-/* --- 布局核心 (Flexbox) --- */
+/* --- Layout --- */
 html,
 body {
     height: 100vh;
     margin: 0;
     padding: 0;
     overflow: hidden;
-    /* 禁止全局滚动 */
 }
 
 body {
@@ -26,7 +25,7 @@ body {
     box-sizing: border-box;
 }
 
-/* --- 工具栏样式 --- */
+/* --- Toolbars --- */
 .toolbar {
     display: flex;
     flex-wrap: wrap;
@@ -52,7 +51,7 @@ body {
     min-width: 220px;
 }
 
-/* --- 查找/替换控件 --- */
+/* --- Find / replace --- */
 /* Its own full-width row, which is what groups it: the inputs stretch the whole
    window, so nothing else reads as belonging to the find widget. */
 .find {
@@ -195,7 +194,7 @@ button {
     margin-top: 10px;
 }
 
-/* --- 列表区域 (独立滚动) --- */
+/* --- List (scrolls on its own) --- */
 .list {
     border-top: 1px solid rgba(127, 127, 127, 0.25);
     width: 100%;
@@ -205,63 +204,51 @@ button {
     min-height: 0;
 }
 
-/* --- 列表项样式 --- */
+/* --- List rows --- */
 .item {
     padding: 10px 8px;
-    /* 稍微增加一点间距 */
     border-bottom: 1px solid rgba(127, 127, 127, 0.18);
     cursor: pointer;
     width: 100%;
     box-sizing: border-box;
     transition: background 0.1s;
-    /* 添加一点过渡效果 */
 }
 
 .item:hover {
     background: rgba(127, 127, 127, 0.10);
 }
 
-/* 选中状态 (鼠标点击) */
+/* Selected by click, as opposed to the row playing now. */
 .item.selected {
     outline: 2px solid rgba(127, 127, 127, 0.35);
     outline-offset: -2px;
 }
 
-/* --- [核心修改] 当前播放行高亮样式 --- */
+/* The row playing right now. */
 .item.current {
-    /* 1. 更明显的背景色 (macOS 风格蓝，带透明度) */
     background: rgba(0, 122, 255, 0.18);
-
-    /* 2. 左侧添加亮蓝色指示条 */
     border-left: 5px solid #007aff;
-
-    /* 因为加了左边框，稍微调整 padding 保持文字对齐（或者让文字稍微右移一点以示区分） */
+    /* Offsets the left border, so the text stays aligned with every other row. */
     padding-left: 12px;
 }
 
-/* 当前行的时间戳 */
 .item.current .time {
     color: #007aff;
-    /* 时间变成蓝色 */
     font-weight: bold;
     opacity: 1;
 }
 
-/* 当前行的字幕文本 */
+/* Stated outright rather than inherited: the tinted background behind this row
+   dulls the default text colour just as the bolder, larger type needs contrast. */
 .item.current .line {
     font-weight: 700;
-    /* 字体加粗 */
     font-size: 1.15em;
-    /* 字体放大 15% */
     color: #000;
-    /* 强制黑色 (Light模式) - 如果是 Dark 模式会自动反色吗？ */
 }
 
-/* 适配暗黑模式下的高亮文字颜色 */
 @media (prefers-color-scheme: dark) {
     .item.current .line {
         color: #fff;
-        /* 暗黑模式下文字亮白 */
     }
 }
 
@@ -296,8 +283,7 @@ mark.active {
         background: rgba(255, 214, 10, 0.3);
     }
 }
-/* --- 编辑功能样式 --- */
-/* --- 帮助提示 --- */
+/* --- Help tooltip --- */
 /* Pushed to the far end of the toolbar, away from the track controls. */
 .help {
     position: relative;
@@ -381,6 +367,7 @@ mark.active {
     cursor: text;
 }
 
+/* --- Inline editor --- */
 .editor {
     width: 100%;
     box-sizing: border-box;
@@ -394,7 +381,7 @@ mark.active {
     color: inherit;
 }
 
-/* --- 右键菜单 --- */
+/* --- Context menu --- */
 .ctxMenu {
     position: fixed;
     z-index: 100;

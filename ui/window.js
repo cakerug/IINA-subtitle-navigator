@@ -634,7 +634,6 @@ document.getElementById("track").addEventListener("change", () => {
   iina.postMessage("setSelection", { trackId });
 });
 
-// 手动切换自动滚动开关时的逻辑
 document.getElementById("autoScrollToggle").addEventListener("change", () => {
   const on = document.getElementById("autoScrollToggle").checked;
   if (on && currentIdx >= 0) {
