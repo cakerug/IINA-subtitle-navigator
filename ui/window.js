@@ -1,26 +1,27 @@
+"use strict";
+
+// The WebView half of the plugin. It owns no subtitle data of its own: rows arrive
+// from main.js and every privileged action goes back as a message.
+//
+// Two things it deliberately does not decide for itself:
+//   * `Nav` (ui/state.js) owns where playback is, what is selected and what
+//     auto-scroll has already brought into view. Its entry points return *effects*,
+//     which `apply()` below turns into DOM.
+//   * `Shortcuts` (ui/shortcuts.js) owns every key binding, so the "?" panel is
+//     generated from the same table the dispatcher reads.
+
+const nav = Nav.create();
+
 let tracks = [];
 let trackId = null;
 
+// Every row of the loaded file. `nav.rows` is this after the search filter, and is
+// what positions everywhere else index into.
 let rows = [];
-let filtered = [];
-// Row ids, not list positions, so selection survives re-renders and search changes.
-let selected = new Set();
-let lastClickedPos = null;
-// Row id currently looping, so the context menu can offer to stop it and the
-// list can mark the row. Looping follows a plain click to another line.
-let loopingId = null;
 
-let currentTime = 0;
-let currentIdx = -1;
-// The row auto-scroll last brought into view. Tracked apart from currentIdx because
-// every render() resyncs currentIdx to the clock, so on load currentIdx can already
-// name the playing row without anything having scrolled to it.
-let lastScrolledIdx = -1;
-// Keeps the selection riding the current line as playback advances. Armed by
-// anything that jumps playback to a line (Scroll to Current, auto-scroll turning on,
-// a plain click, Enter) and disarmed by browsing without seeking (j/k/arrows,
-// multi-select clicks).
-let followCurrent = false;
+// Row id currently looping, so the context menu can offer to stop it and the list
+// can mark the row. Looping follows a plain click to another line.
+let loopingId = null;
 
 let editingId = null;
 
@@ -44,8 +45,9 @@ let redoStack = [];
 let loadedPath = null;
 
 let noticeTimer = null;
-
 let listMessage = "";
+
+const $ = (id) => document.getElementById(id);
 
 function fmt(t) {
   const s = Math.max(0, Math.floor(t));
@@ -56,7 +58,7 @@ function fmt(t) {
 }
 
 function showNotice(message, kind = "info") {
-  const el = document.getElementById("notice");
+  const el = $("notice");
   el.textContent = message;
   el.className = `notice ${kind}`;
   el.hidden = false;
@@ -65,13 +67,28 @@ function showNotice(message, kind = "info") {
 }
 
 function clearNotice() {
-  const el = document.getElementById("notice");
-  el.hidden = true;
+  $("notice").hidden = true;
   if (noticeTimer) clearTimeout(noticeTimer);
 }
 
+/** Effects */
+
+// Carries out what a Nav transition decided. Render first: the scroll and focus
+// steps below need the rebuilt rows to exist.
+function apply(fx) {
+  if (!fx) return;
+  if (fx.render) render();
+  if (fx.autoScroll !== null) $("autoScrollToggle").checked = fx.autoScroll;
+  if (fx.notice) showNotice(fx.notice);
+  if (fx.scrollTo !== null) scrollToIndex(fx.scrollTo);
+  if (fx.seekTo !== null) iina.postMessage("seekTo", { time: fx.seekTo });
+  if (fx.scrollToCurrent) iina.postMessage("scrollToCurrent", {});
+}
+
+/** Search */
+
 function populateSelect() {
-  const sel = document.getElementById("track");
+  const sel = $("track");
   sel.innerHTML = "";
   tracks.forEach(t => {
     const op = document.createElement("option");
@@ -87,11 +104,11 @@ function normalizeText(value) {
 }
 
 function queryText() {
-  return document.getElementById("q").value.trim();
+  return $("q").value.trim();
 }
 
 function caseSensitive() {
-  return document.getElementById("caseToggle").getAttribute("aria-pressed") === "true";
+  return $("caseToggle").getAttribute("aria-pressed") === "true";
 }
 
 // The query is matched as a literal, so filtering, highlighting and replacing all
@@ -121,8 +138,10 @@ function computeMatches() {
 
   matches = [];
   if (re) {
-    for (const r of filtered) {
-      for (const m of String(r.text || "").matchAll(searchRegex())) {
+    for (const r of nav.rows) {
+      // matchAll works from a clone, so `re` keeps its own lastIndex at 0 and can
+      // be reused down the rows.
+      for (const m of String(r.text || "").matchAll(re)) {
         matches.push({ id: r.id, time: r.start, start: m.index, end: m.index + m[0].length });
       }
     }
@@ -141,128 +160,101 @@ function computeMatches() {
   updateFindState();
 }
 
-function applyFilter() {
+function applyFilter(opts = {}) {
   const re = filterRegex();
-  filtered = re ? rows.filter(r => re.test(r.text || "")) : rows.slice();
-  lastClickedPos = null;
+  const fx = Nav.setRows(nav, re ? rows.filter(r => re.test(r.text || "")) : rows.slice(), opts);
   computeMatches();
-  render();
+  apply(fx);
 }
 
-function findCurrentIndex() {
-  let lo = 0, hi = filtered.length - 1;
-  let best = -1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    const r = filtered[mid];
-    if (currentTime < r.start) hi = mid - 1;
-    else if (currentTime > r.end) { best = mid; lo = mid + 1; }
-    else return mid;
-  }
-  return best;
-}
+/** Editing */
 
-// Where j/k and the arrow keys act. Falls back to the currently playing row so
-// the first press moves from wherever playback is, not from the top of the list.
-function focusedPos() {
-  if (lastClickedPos != null && filtered[lastClickedPos]) return lastClickedPos;
-  return currentIdx >= 0 ? currentIdx : (filtered.length ? 0 : -1);
-}
-
-function selectPos(pos) {
-  const r = filtered[pos];
-  if (!r) return;
-  selected.clear();
-  selected.add(r.id);
-  lastClickedPos = pos;
-  render();
-}
-
-// Browsing with j/k/arrows overrides auto-scroll the same way it breaks follow
-// mode, since otherwise the next playback tick would yank the list back to the
-// current line out from under the row the user just moved to.
-function disableAutoScroll() {
-  const toggle = document.getElementById("autoScrollToggle");
-  if (toggle && toggle.checked) {
-    toggle.checked = false;
-    showNotice("Auto-scroll off");
-  }
-}
-
-// Tracked so a mousemove the pointer did not actually cause can be ignored:
-// scrolling rows under a resting cursor fires one on its own, which would drop
-// keyboard mode on the very keypress that scrolled the list.
-let lastMouse = { x: -1, y: -1 };
-
-function setKeyboardNav(on) {
-  document.getElementById("list").classList.toggle("kbdNav", on);
-}
-
-document.addEventListener("mousemove", (e) => {
-  if (e.clientX === lastMouse.x && e.clientY === lastMouse.y) return;
-  lastMouse = { x: e.clientX, y: e.clientY };
-  setKeyboardNav(false);
-});
-
-function moveFocus(delta) {
-  if (!filtered.length) return;
-  followCurrent = false;
-  setKeyboardNav(true);
-  disableAutoScroll();
-  const pos = Math.max(0, Math.min(filtered.length - 1, Math.max(focusedPos(), 0) + delta));
-  selectPos(pos);
-  scrollToIndex(pos);
-}
-
-// applyChanges runs the edit through applyFilter, which clears lastClickedPos
-// since filtering can invalidate a stale position. Left alone, the next j/k or
-// arrow press would fall back to wherever playback is instead of continuing from
-// the line just edited.
 function focusRow(id) {
-  const pos = filtered.findIndex(r => r.id === id);
-  if (pos >= 0) selectPos(pos);
+  const pos = nav.rows.findIndex(r => r.id === id);
+  if (pos >= 0 && Nav.selectPos(nav, pos)) render();
 }
 
-function commitEdit(ta, id) {
-  if (ta.dataset.done) return false;
-  const value = ta.value;
-  if (value.trim() === "") {
+function currentEditor() {
+  return $("list").querySelector(".editor");
+}
+
+function commitEdit() {
+  const ta = currentEditor();
+  // A teardown blur can arrive after the editor has already been closed, so this is
+  // reached with nothing to commit.
+  if (!ta || ta.dataset.done || editingId == null) return;
+  const id = editingId;
+  if (ta.value.trim() === "") {
     showNotice("Subtitle text cannot be empty — press Escape to cancel instead.", "error");
     ta.focus();
-    return false;
+    return;
   }
   ta.dataset.done = "1";
   editingId = null;
+  nav.editing = false;
 
-  const next = normalizeText(value);
+  const next = normalizeText(ta.value);
   const row = rows.find(r => r.id === id);
-  if (!row || next === row.text) { render(); focusRow(id); return true; }
+  if (!row || next === row.text) { render(); focusRow(id); return; }
 
   const changes = [{ id, before: row.text, after: next }];
   pushUndo("the edit", changes);
   applyChanges(changes, "after");
   focusRow(id);
-  return true;
 }
 
-function cancelEdit(ta) {
-  ta.dataset.done = "1";
+function cancelEdit() {
+  const ta = currentEditor();
+  if (ta) ta.dataset.done = "1";
   editingId = null;
+  nav.editing = false;
   render();
 }
 
+function startEdit(id) {
+  editingId = id;
+  nav.editing = true;
+  clearNotice();
+  render();
+  const ta = currentEditor();
+  if (ta) { ta.focus(); ta.select(); }
+}
+
+function editFocused() {
+  const r = nav.rows[Nav.focusedPos(nav)];
+  if (r) startEdit(r.id);
+}
+
+function buildEditor(r, carry) {
+  const ta = document.createElement("textarea");
+  ta.className = "editor";
+  // `carry` is the in-flight text of an editor this render is replacing. Seeding from
+  // r.text instead would discard whatever was typed since the row was last posted.
+  const seed = carry ? carry.value : (r.text || "");
+  ta.value = seed;
+  ta.rows = Math.min(6, seed.split("\n").length + 1);
+
+  ta.addEventListener("blur", commitEdit);
+  ta.addEventListener("mousedown", (e) => e.stopPropagation());
+  ta.addEventListener("click", (e) => e.stopPropagation());
+  ta.addEventListener("contextmenu", (e) => e.stopPropagation());
+  return ta;
+}
+
+/** Context menu */
+
 function isMenuOpen() {
-  return !document.getElementById("ctxMenu").hidden;
+  return !$("ctxMenu").hidden;
 }
 
 function closeContextMenu() {
-  const el = document.getElementById("ctxMenu");
+  const el = $("ctxMenu");
   el.hidden = true;
   el.innerHTML = "";
 }
 
 function openContextMenu(x, y, r) {
-  const el = document.getElementById("ctxMenu");
+  const el = $("ctxMenu");
   el.innerHTML = "";
 
   const add = (label, hint, fn, disabled) => {
@@ -286,9 +278,11 @@ function openContextMenu(x, y, r) {
     el.appendChild(d);
   };
 
-  add("Edit text", "⌘⏎", () => startEdit(r.id));
+  // Hints come from the shortcuts table, so they cannot drift from the bindings.
+  add("Edit text", Shortcuts.display("editFocused"), () => startEdit(r.id));
   sep();
-  add("Jump to this line", "⏎", () => iina.postMessage("seekTo", { time: r.start }));
+  add("Jump to this line", Shortcuts.display("jumpToFocused"), () =>
+    iina.postMessage("seekTo", { time: r.start }));
   if (loopingId === r.id) {
     add("Stop looping", "", () => {
       loopingId = null;
@@ -303,7 +297,7 @@ function openContextMenu(x, y, r) {
     });
   }
   sep();
-  const batch = selected.has(r.id) && selected.size > 1 ? selectedRows() : [r];
+  const batch = nav.selected.has(r.id) && nav.selected.size > 1 ? selectedRows() : [r];
   const suffix = batch.length > 1 ? ` (${batch.length} lines)` : "";
   const join = (parts) => parts.filter(Boolean).join("\n\n");
   add(`Copy text${suffix}`, "", () => copyText(join(batch.map(x => x.text || ""))));
@@ -315,40 +309,26 @@ function openContextMenu(x, y, r) {
   el.style.left = "0px";
   el.style.top = "0px";
   const rect = el.getBoundingClientRect();
-  const left = Math.max(4, Math.min(x, window.innerWidth - rect.width - 4));
-  const top = Math.max(4, Math.min(y, window.innerHeight - rect.height - 4));
-  el.style.left = `${left}px`;
-  el.style.top = `${top}px`;
+  el.style.left = `${Math.max(4, Math.min(x, window.innerWidth - rect.width - 4))}px`;
+  el.style.top = `${Math.max(4, Math.min(y, window.innerHeight - rect.height - 4))}px`;
 }
 
-function startEdit(id) {
-  editingId = id;
-  clearNotice();
-  render();
-  const ta = document.querySelector(".editor");
-  if (ta) { ta.focus(); ta.select(); }
+/** Rendering */
+
+// Tracked so a mousemove the pointer did not actually cause can be ignored:
+// scrolling rows under a resting cursor fires one on its own, which would drop
+// keyboard mode on the very keypress that scrolled the list.
+let lastMouse = { x: -1, y: -1 };
+
+function setKeyboardNav(on) {
+  $("list").classList.toggle("kbdNav", on);
 }
 
-function buildEditor(r, carry) {
-  const ta = document.createElement("textarea");
-  ta.className = "editor";
-  // `carry` is the in-flight text of an editor this render is replacing. Seeding from
-  // r.text instead would discard whatever was typed since the row was last posted.
-  const seed = carry ? carry.value : (r.text || "");
-  ta.value = seed;
-  ta.rows = Math.min(6, seed.split("\n").length + 1);
-
-  ta.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); commitEdit(ta, r.id); }
-    else if (e.key === "Escape") { e.preventDefault(); cancelEdit(ta); }
-    e.stopPropagation();
-  });
-  ta.addEventListener("blur", () => commitEdit(ta, r.id));
-  ta.addEventListener("mousedown", (e) => e.stopPropagation());
-  ta.addEventListener("click", (e) => e.stopPropagation());
-  ta.addEventListener("contextmenu", (e) => e.stopPropagation());
-  return ta;
-}
+document.addEventListener("mousemove", (e) => {
+  if (e.clientX === lastMouse.x && e.clientY === lastMouse.y) return;
+  lastMouse = { x: e.clientX, y: e.clientY };
+  setKeyboardNav(false);
+});
 
 // Marks every occurrence of the query, and the one Replace will act on. Built from
 // text nodes rather than innerHTML so subtitle text carrying < or & cannot become
@@ -370,8 +350,16 @@ function fillLine(el, text, rowId) {
   el.appendChild(document.createTextNode(text.slice(last)));
 }
 
+// Why the list is empty, when it is. A search that matches nothing used to render a
+// blank pane with only the find bar's small counter to explain it.
+function emptyMessage() {
+  if (listMessage) return listMessage;
+  if (!rows.length) return "";
+  return queryText() ? `No lines match "${queryText()}".` : "";
+}
+
 function render() {
-  const list = document.getElementById("list");
+  const list = $("list");
 
   // An editor being rebuilt for the same row keeps its text, caret and focus; one
   // whose row is going away is marked done so its teardown blur cannot re-commit.
@@ -395,26 +383,24 @@ function render() {
   const scrollTop = list.scrollTop;
   closeContextMenu();
   list.innerHTML = "";
-  currentIdx = findCurrentIndex();
 
-  if (!filtered.length && listMessage) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.innerText = listMessage;
-    list.appendChild(empty);
+  if (!nav.rows.length) {
+    const message = emptyMessage();
+    if (message) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.innerText = message;
+      list.appendChild(empty);
+    }
     return;
   }
 
-  filtered.forEach((r, pos) => {
+  nav.rows.forEach((r, pos) => {
     const item = document.createElement("div");
-    const isSel = selected.has(r.id);
-    const isCur = (pos === currentIdx);
-    const isEditing = (r.id === editingId);
-
     item.className = "item"
-      + (isSel ? " selected" : "")
-      + (isCur ? " current" : "")
-      + (isEditing ? " editing" : "")
+      + (nav.selected.has(r.id) ? " selected" : "")
+      + (pos === nav.currentIdx ? " current" : "")
+      + (r.id === editingId ? " editing" : "")
       + (r.id === loopingId ? " looping" : "");
     item.dataset.index = String(pos);
     item.dataset.id = String(r.id);
@@ -424,7 +410,7 @@ function render() {
     time.textContent = fmt(r.start);
     item.appendChild(time);
 
-    if (isEditing) {
+    if (r.id === editingId) {
       item.appendChild(buildEditor(r, carry));
     } else {
       const line = document.createElement("div");
@@ -442,42 +428,9 @@ function render() {
 
     item.addEventListener("click", (e) => {
       if (editingId === r.id) return;
-      const isRange = e.shiftKey && lastClickedPos != null;
-      const isToggle = e.metaKey || e.ctrlKey;
-
-      if (isRange) {
-        followCurrent = false;
-        const a = Math.min(lastClickedPos, pos);
-        const b = Math.max(lastClickedPos, pos);
-        selected.clear();
-        for (let k = a; k <= b; k++) if (filtered[k]) selected.add(filtered[k].id);
-      } else if (isToggle) {
-        followCurrent = false;
-        if (selected.has(r.id)) selected.delete(r.id); else selected.add(r.id);
-        lastClickedPos = pos;
-      } else {
-        // A plain click jumps playback here, so following picks back up from this line.
-        followCurrent = true;
-        selected.clear();
-        selected.add(r.id);
-        lastClickedPos = pos;
-        iina.postMessage("seekTo", { time: r.start });
-      }
-
-      if (loopingId != null) {
-        loopingId = r.id;
-        iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
-      }
-
-      // Clicking a row moves the find cursor onto it, so Replace acts on the line
-      // being pointed at. A row already holding the cursor is left alone, so
-      // clicking around does not walk the cursor through a multi-match line.
-      if (matches.length && matches[matchIdx]?.id !== r.id) {
-        const i = matches.findIndex(m => m.id === r.id);
-        if (i >= 0) { matchIdx = i; updateFindState(); }
-      }
-
-      render();
+      apply(Nav.clickRow(nav, pos, { range: e.shiftKey, toggle: e.metaKey || e.ctrlKey }));
+      followLoopTo(r);
+      moveFindCursorTo(r);
     });
 
     list.appendChild(item);
@@ -494,6 +447,23 @@ function render() {
   }
 }
 
+// Looping follows the line you jump to, since the row marker is its only indication.
+function followLoopTo(r) {
+  if (loopingId == null || loopingId === r.id) return;
+  loopingId = r.id;
+  iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
+  render();
+}
+
+// Clicking a row moves the find cursor onto it, so Replace acts on the line being
+// pointed at. A row already holding the cursor is left alone, so clicking around does
+// not walk the cursor through a multi-match line.
+function moveFindCursorTo(r) {
+  if (!matches.length || matches[matchIdx]?.id === r.id) return;
+  const i = matches.findIndex(m => m.id === r.id);
+  if (i >= 0) { matchIdx = i; updateFindState(); render(); }
+}
+
 async function copyText(text) {
   if (!text) return;
   try {
@@ -506,7 +476,7 @@ async function copyText(text) {
 }
 
 function selectedRows() {
-  return rows.filter(r => selected.has(r.id)).sort((a, b) => a.start - b.start);
+  return rows.filter(r => nav.selected.has(r.id)).sort((a, b) => a.start - b.start);
 }
 
 /** Undo */
@@ -542,14 +512,14 @@ function clearUndo() {
 }
 
 function updateUndoState() {
-  document.getElementById("undo").disabled = !undoStack.length;
-  document.getElementById("redo").disabled = !redoStack.length;
+  $("undo").disabled = !undoStack.length;
+  $("redo").disabled = !redoStack.length;
 }
 
 // Puts the first line an undo touched back on screen, so a stack entry from far up
 // the file is something the user sees rather than has to go looking for.
 function revealRow(id) {
-  const pos = filtered.findIndex(r => r.id === id);
+  const pos = nav.rows.findIndex(r => r.id === id);
   if (pos >= 0) scrollToIndex(pos);
 }
 
@@ -566,12 +536,13 @@ function step(from, to, key, verb) {
 function undo() { step(undoStack, redoStack, "before", "Undid"); }
 function redo() { step(redoStack, undoStack, "after", "Redid"); }
 
+/** Find and replace */
+
 function updateFindState() {
   const has = matches.length > 0;
-  document.getElementById("matchCount").textContent =
-    !searchRegex() ? "" : (has ? `${matchIdx + 1} of ${matches.length}` : "No results");
+  $("matchCount").textContent = !queryText() ? "" : (has ? `${matchIdx + 1} of ${matches.length}` : "No results");
   for (const id of ["prevMatch", "nextMatch", "replaceOne", "replaceAll"]) {
-    document.getElementById(id).disabled = !has;
+    $(id).disabled = !has;
   }
 }
 
@@ -588,7 +559,7 @@ function scrollToMatch() {
 }
 
 function replacement() {
-  return document.getElementById("replaceWith").value;
+  return $("replaceWith").value;
 }
 
 function replaceCurrent() {
@@ -627,7 +598,7 @@ function replaceAll() {
   let count = 0;
   let emptied = 0;
 
-  for (const row of filtered) {
+  for (const row of nav.rows) {
     const text = row.text || "";
     let hits = 0;
     // A replacer function rather than a string, so `$&` and friends typed into the
@@ -654,9 +625,14 @@ function replaceAll() {
     + (emptied ? ` Left ${plural(emptied, "line")} alone, which the replacement would have emptied.` : ""));
 }
 
-function scrollToIndex(idx) {
-  lastScrolledIdx = idx;
-  scrollRowIntoView(document.querySelector(`.item[data-index="${idx}"]`));
+/** Scrolling */
+
+function rowElement(pos) {
+  return document.querySelector(`.item[data-index="${pos}"]`);
+}
+
+function scrollToIndex(pos) {
+  scrollRowIntoView(rowElement(pos));
 }
 
 // Below this many visible rows there's not enough room to read ahead, so we fall
@@ -669,7 +645,7 @@ const ROWS_ABOVE_TARGET = 3;
 // instead of centering it, so the upcoming lines stay in view below it.
 function scrollRowIntoView(el) {
   if (!el) return;
-  const list = document.getElementById("list");
+  const list = $("list");
   const rowHeight = el.getBoundingClientRect().height || 1;
   if (list.clientHeight / rowHeight > MIN_ROWS_TO_READ_AHEAD) {
     const offset = el.getBoundingClientRect().top - list.getBoundingClientRect().top;
@@ -677,6 +653,17 @@ function scrollRowIntoView(el) {
   } else {
     el.scrollIntoView({ block: "center", behavior: "smooth" });
   }
+}
+
+// Whether the playing row is on screen. This, not "does focus happen to equal the
+// current row", is what decides whether Escape means "take me there" or "toggle
+// auto-scroll" — a focus that has never moved reports as being on the current row.
+function isCurrentRowVisible() {
+  const el = rowElement(nav.currentIdx);
+  if (!el) return false;
+  const row = el.getBoundingClientRect();
+  const list = $("list").getBoundingClientRect();
+  return row.bottom > list.top && row.top < list.bottom;
 }
 
 // Resizing moves the current row off its resting place, and crossing
@@ -687,163 +674,160 @@ const RESIZE_SETTLE_MS = 150;
 let resizeScrollTimer = null;
 new ResizeObserver(() => {
   clearTimeout(resizeScrollTimer);
-  resizeScrollTimer = setTimeout(() => {
-    if (editingId != null) return;
-    if (currentIdx !== -1 && document.getElementById("autoScrollToggle").checked) {
-      scrollToIndex(currentIdx);
-    }
-  }, RESIZE_SETTLE_MS);
-}).observe(document.getElementById("list"));
+  resizeScrollTimer = setTimeout(() => apply(Nav.resize(nav)), RESIZE_SETTLE_MS);
+}).observe($("list"));
 
-/** Toolbar actions */
-function updateClearButton() {
-  document.getElementById("clearSearch").hidden = !document.getElementById("q").value;
+/** Help */
+
+// Built from the shortcuts table rather than written out in the HTML, so a binding
+// cannot be added without showing up here.
+function renderHelp() {
+  const tip = $("helpTip");
+  tip.innerHTML = "";
+
+  for (const note of Shortcuts.NOTES) {
+    const p = document.createElement("p");
+    p.className = "helpNote";
+    p.textContent = note;
+    tip.appendChild(p);
+  }
+
+  for (const section of Shortcuts.helpSections()) {
+    const h = document.createElement("b");
+    h.textContent = section.title;
+    tip.appendChild(h);
+
+    const dl = document.createElement("dl");
+    dl.className = "helpKeys";
+    for (const item of section.items) {
+      const dt = document.createElement("dt");
+      const k = document.createElement("kbd");
+      k.textContent = item.display;
+      dt.appendChild(k);
+      const dd = document.createElement("dd");
+      dd.textContent = item.label;
+      dl.appendChild(dt);
+      dl.appendChild(dd);
+    }
+    tip.appendChild(dl);
+  }
 }
 
-document.getElementById("q").addEventListener("input", () => { updateClearButton(); applyFilter(); });
+/** Toolbar */
 
-document.getElementById("clearSearch").addEventListener("click", () => {
-  const q = document.getElementById("q");
-  q.value = "";
+function updateClearButton() {
+  $("clearSearch").hidden = !$("q").value;
+}
+
+$("q").addEventListener("input", () => { updateClearButton(); applyFilter(); });
+
+$("clearSearch").addEventListener("click", () => {
+  $("q").value = "";
   updateClearButton();
   applyFilter();
-  q.focus();
+  $("q").focus();
 });
 
 function setReplaceOpen(open) {
-  document.getElementById("replaceRow").hidden = !open;
-  document.getElementById("toggleReplace").setAttribute("aria-expanded", String(open));
-  if (open) document.getElementById("replaceWith").focus();
+  $("replaceRow").hidden = !open;
+  $("toggleReplace").setAttribute("aria-expanded", String(open));
+  if (open) $("replaceWith").focus();
 }
 
-document.getElementById("toggleReplace").addEventListener("click", () => {
-  setReplaceOpen(document.getElementById("replaceRow").hidden);
-});
+$("toggleReplace").addEventListener("click", () => setReplaceOpen($("replaceRow").hidden));
 
-document.getElementById("caseToggle").addEventListener("click", (e) => {
+$("caseToggle").addEventListener("click", (e) => {
   const on = e.currentTarget.getAttribute("aria-pressed") === "true";
   e.currentTarget.setAttribute("aria-pressed", String(!on));
   applyFilter();
 });
 
-document.getElementById("prevMatch").addEventListener("click", () => gotoMatch(-1));
-document.getElementById("nextMatch").addEventListener("click", () => gotoMatch(1));
-document.getElementById("replaceOne").addEventListener("click", replaceCurrent);
-document.getElementById("replaceAll").addEventListener("click", replaceAll);
-document.getElementById("undo").addEventListener("click", undo);
-document.getElementById("redo").addEventListener("click", redo);
+$("prevMatch").addEventListener("click", () => gotoMatch(-1));
+$("nextMatch").addEventListener("click", () => gotoMatch(1));
+$("replaceOne").addEventListener("click", replaceCurrent);
+$("replaceAll").addEventListener("click", replaceAll);
+$("undo").addEventListener("click", undo);
+$("redo").addEventListener("click", redo);
 
-function isPlainEnter(e) {
-  return e.key === "Enter" && !e.metaKey && !e.ctrlKey;
-}
-
-document.getElementById("q").addEventListener("keydown", (e) => {
-  if (isPlainEnter(e)) { e.preventDefault(); gotoMatch(e.shiftKey ? -1 : 1); }
-});
-
-document.getElementById("replaceWith").addEventListener("keydown", (e) => {
-  if (isPlainEnter(e)) { e.preventDefault(); replaceCurrent(); }
-  else if (e.key === "Escape") { e.preventDefault(); setReplaceOpen(false); document.getElementById("q").focus(); }
-});
-
-document.getElementById("reload").addEventListener("click", () => {
+$("reload").addEventListener("click", () => {
   clearNotice();
   iina.postMessage("reload", {});
 });
 
-document.getElementById("track").addEventListener("change", () => {
-  trackId = Number(document.getElementById("track").value);
+$("track").addEventListener("change", () => {
+  trackId = Number($("track").value);
   iina.postMessage("setSelection", { trackId });
 });
 
-document.getElementById("autoScrollToggle").addEventListener("change", () => {
-  const on = document.getElementById("autoScrollToggle").checked;
-  // Turning auto-scroll on jumps to the current line, same as the button below.
-  if (on && currentIdx >= 0) {
-    iina.postMessage("scrollToCurrent", {});
-  } else {
-    followCurrent = false;
-  }
+$("autoScrollToggle").addEventListener("change", (e) => {
+  apply(Nav.setAutoScroll(nav, e.currentTarget.checked));
 });
 
-document.getElementById("scrollCurrent").addEventListener("click", () => iina.postMessage("scrollToCurrent", {}));
+$("scrollCurrent").addEventListener("click", () => iina.postMessage("scrollToCurrent", {}));
+
+// Scrolling by hand overrides auto-scroll for the same reason j/k does. `wheel` and
+// not `scroll`, which the smooth scrolling below fires on its own.
+$("list").addEventListener("wheel", () => apply(Nav.browseAway(nav)), { passive: true });
 
 document.addEventListener("mousedown", (e) => {
   if (!e.target.closest("#ctxMenu")) closeContextMenu();
 });
-document.getElementById("list").addEventListener("scroll", closeContextMenu);
+$("list").addEventListener("scroll", closeContextMenu);
 window.addEventListener("blur", closeContextMenu);
 // Right-clicking outside a row should dismiss rather than show WebKit's own menu.
 document.addEventListener("contextmenu", (e) => { e.preventDefault(); closeContextMenu(); });
 
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
+/** Keyboard */
+
+// Which set of bindings applies. Keys mean different things in the list, inside an
+// open row editor, and inside the find fields — deciding that here, once, is what
+// keeps a list binding from firing while the user is typing in a text box.
+function keyContext(target) {
+  if (target?.classList?.contains("editor")) return "editing";
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(target?.tagName || "")) return "find";
+  return "list";
+}
+
+// Action id -> what it does. Every id here comes from ui/shortcuts.js, and
+// test/shortcuts.test.js checks the two sides stay in step.
+const SHORTCUT_HANDLERS = {
+  moveDown: () => { setKeyboardNav(true); apply(Nav.moveFocus(nav, 1)); },
+  moveUp: () => { setKeyboardNav(true); apply(Nav.moveFocus(nav, -1)); },
+  jumpToFocused: () => {
+    setKeyboardNav(true);
+    const r = nav.rows[Nav.focusedPos(nav)];
+    apply(Nav.activateFocused(nav));
+    if (r) followLoopTo(r);
+  },
+  editFocused: editFocused,
+  togglePause: () => iina.postMessage("togglePause", {}),
+  undo: undo,
+  redo: redo,
+  escape: () => {
     closeContextMenu();
-    // Editing has its own Escape handler (cancel); outside of that, Escape is a
-    // quick way back to wherever playback is. Pressed again once already there,
-    // it becomes a keyboard shortcut for the auto-scroll toggle instead of a no-op.
-    if (editingId == null) {
-      const toggle = document.getElementById("autoScrollToggle");
-      if (focusedPos() === currentIdx && currentIdx !== -1) {
-        const on = !toggle.checked;
-        toggle.checked = on;
-        if (on) {
-          followCurrent = true;
-          iina.postMessage("scrollToCurrent", {});
-        } else {
-          followCurrent = false;
-        }
-        showNotice(on ? "Auto-scroll on" : "Auto-scroll off");
-      } else {
-        iina.postMessage("scrollToCurrent", {});
-      }
-    }
-  }
-  // Inside a text field these belong to the field itself, not list navigation.
-  const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || "");
+    apply(Nav.escape(nav, { currentRowVisible: isCurrentRowVisible() }));
+  },
+  commitEdit: commitEdit,
+  cancelEdit: cancelEdit,
+  nextMatch: () => {
+    // From the replace field, Enter is Replace; from the search field it walks matches.
+    if (document.activeElement === $("replaceWith")) replaceCurrent();
+    else gotoMatch(1);
+  },
+  prevMatch: () => gotoMatch(-1),
+  closeFind: () => {
+    setReplaceOpen(false);
+    $("q").focus();
+  },
+};
 
-  // Space on a focused button is that button's own activation key.
-  const onButton = e.target?.tagName === "BUTTON";
-
-  if (!inField && !onButton && editingId == null && e.key === " "
-      && !e.metaKey && !e.ctrlKey && !e.altKey) {
-    e.preventDefault();
-    iina.postMessage("togglePause", {});
-  }
-
-  if (!inField && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
-    e.preventDefault();
-    if (e.shiftKey) redo(); else undo();
-  }
-  if (!inField && editingId == null && !e.metaKey && !e.ctrlKey && !e.altKey) {
-    if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); moveFocus(1); }
-    else if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); moveFocus(-1); }
-  }
-  if (!inField && editingId == null && !e.altKey && e.key === "Enter") {
-    const pos = focusedPos();
-    const r = filtered[pos];
-    if (r) {
-      e.preventDefault();
-      // Cmd/Ctrl+Enter edits the focused line, which falls back to the current one
-      // when nothing else is focused.
-      if (e.metaKey || e.ctrlKey) {
-        startEdit(r.id);
-      } else {
-        // Enter jumps playback here too, so following picks back up from this line.
-        followCurrent = true;
-        setKeyboardNav(true);
-        selectPos(pos);
-        iina.postMessage("seekTo", { time: r.start });
-        if (loopingId != null) {
-          loopingId = r.id;
-          iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
-        }
-      }
-    }
-  }
+document.addEventListener("keydown", (event) => {
+  const context = keyContext(event.target);
+  if (Shortcuts.dispatch(event, context, SHORTCUT_HANDLERS)) event.preventDefault();
 });
 
 /** Messages */
+
 iina.onMessage("setTracks", (data) => {
   tracks = Array.isArray(data?.tracks) ? data.tracks : [];
   trackId = data?.trackId ?? null;
@@ -854,16 +838,17 @@ iina.onMessage("setRows", ({ rows: r, meta }) => {
   rows = Array.isArray(r) ? r : [];
 
   const path = meta?.path ?? null;
-  // A fresh file (including the first load) may start mid-playback, e.g. IINA
-  // resuming a video, so jump to wherever the video already is instead of leaving
-  // the list parked at the top until the next playback tick happens to move it.
   const isNewFile = path !== loadedPath;
-  if (isNewFile) { loadedPath = path; clearUndo(); lastScrolledIdx = -1; }
+  if (isNewFile) {
+    loadedPath = path;
+    clearUndo();
+    // The loop belongs to the file it was set on; main.js drops it at the same point.
+    loopingId = null;
+  }
 
-  const liveIds = new Set(rows.map(x => x.id));
-  for (const id of [...selected]) if (!liveIds.has(id)) selected.delete(id);
-  if (editingId != null && !liveIds.has(editingId)) editingId = null;
-  if (loopingId != null && !liveIds.has(loopingId)) {
+  const live = new Set(rows.map(x => x.id));
+  if (editingId != null && !live.has(editingId)) { editingId = null; nav.editing = false; }
+  if (loopingId != null && !live.has(loopingId)) {
     loopingId = null;
     iina.postMessage("loopLine", { enabled: false });
   }
@@ -873,60 +858,26 @@ iina.onMessage("setRows", ({ rows: r, meta }) => {
   // The whole row goes with the count: with nothing loaded there is no row count to
   // report and nothing to undo either.
   const count = meta?.count ?? rows.length;
-  document.getElementById("meta").innerText = count ? `Rows: ${count}` : "";
+  $("meta").innerText = count ? `Rows: ${count}` : "";
   document.querySelector(".statusRow").hidden = !count;
 
-  applyFilter();
-
-  if (isNewFile && rows.length && document.getElementById("autoScrollToggle").checked) {
-    iina.postMessage("scrollToCurrent", {});
-  }
+  applyFilter({ isNewFile });
 });
 
 iina.onMessage("time", ({ t }) => {
-  if (typeof t === "number" && isFinite(t)) {
-    currentTime = t;
-    // Re-rendering would tear down an open editor mid-typing, or yank the context
-    // menu out from under the pointer as playback advances.
-    if (editingId != null || isMenuOpen()) return;
-    const idx = findCurrentIndex();
-
-    if (idx !== currentIdx) {
-      // Following keeps the selection on the current line as it advances; selectPos
-      // already re-renders, so a plain render() would just redo that work.
-      if (followCurrent && idx !== -1) {
-        selectPos(idx);
-      } else {
-        // Playback sits before the first line, so there is no row to ride. Left
-        // alone, the outline would stay behind claiming to be the followed row.
-        if (followCurrent) { selected.clear(); lastClickedPos = null; }
-        render();
-      }
-    }
-
-    // Deliberately outside the block above: the row can become current without the
-    // index changing here, because a render() elsewhere already moved currentIdx
-    // onto it. Scrolling when it is not the row on screen catches those too.
-    const autoScroll = document.getElementById("autoScrollToggle")?.checked;
-    if (autoScroll && idx !== -1 && idx !== lastScrolledIdx) {
-      scrollToIndex(idx);
-    }
-  }
+  if (typeof t !== "number" || !isFinite(t)) return;
+  // Re-rendering would yank the context menu out from under the pointer as playback
+  // advances; the next tick after it closes resyncs.
+  if (isMenuOpen()) return;
+  apply(Nav.tick(nav, t));
 });
 
-// The only sender of this message is "Scroll to Current" (directly, or via auto-scroll
-// switching on). Landing here selects the row and arms follow mode, so the selection
-// keeps riding the current line as playback advances until a manual nav breaks it.
+// The only sender is "Scroll to Current" — directly, or via auto-scroll switching on.
 // It carries a time rather than a row index because indices here are into the
-// filtered list, which the sender cannot see.
+// filtered list, which a search can narrow and which main.js cannot see.
 iina.onMessage("scrollToTime", ({ t }) => {
   if (typeof t !== "number" || !isFinite(t)) return;
-  currentTime = t;
-  const idx = findCurrentIndex();
-  if (idx === -1) return;
-  followCurrent = true;
-  selectPos(idx);
-  scrollToIndex(idx);
+  apply(Nav.jumpToTime(nav, t));
 });
 
 iina.onMessage("notice", (data) => {
@@ -941,8 +892,10 @@ iina.onMessage("saveResult", (data) => {
   showNotice(String(data?.message || "") + (discarded ? `\n\nReverted text: ${discarded}` : ""), "error");
 });
 
+renderHelp();
+$("autoScrollToggle").checked = nav.autoScroll;
 iina.postMessage("uiReady", {});
 
-window.addEventListener('beforeunload', () => {
-  try { iina.postMessage('windowClosed', {}); } catch (_) { }
+window.addEventListener("beforeunload", () => {
+  try { iina.postMessage("windowClosed", {}); } catch (_) { }
 });

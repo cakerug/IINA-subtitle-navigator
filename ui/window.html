@@ -15,13 +15,9 @@
     <button id="reload">Reload</button>
     <span class="help">
       <button class="helpBtn" aria-describedby="helpTip">?</button>
-      <span class="helpTip" id="helpTip" role="tooltip">
-        <b>Right-click a line</b> for edit, jump, loop and copy actions.<br />
-        While editing: <kbd>Enter</kbd> commits, <kbd>Shift</kbd>+<kbd>Enter</kbd> adds a newline,
-        <kbd>Esc</kbd> cancels.<br />
-        <kbd>Esc</kbd> (outside editing) scrolls to the current line; press it again to toggle auto-scroll.<br />
-        <kbd>Space</kbd> (outside editing) plays or pauses.
-      </span>
+      <!-- Filled by renderHelp() from ui/shortcuts.js, so it cannot fall behind the
+           bindings the way a hand-written list does. -->
+      <span class="helpTip" id="helpTip" role="tooltip"></span>
     </span>
   </div>
 
@@ -63,6 +59,9 @@
 
   <div id="ctxMenu" class="ctxMenu" hidden></div>
 
+  <!-- state.js and shortcuts.js define the globals window.js reads, so they load first. -->
+  <script src="state.js"></script>
+  <script src="shortcuts.js"></script>
   <script src="window.js"></script>
 </body>
 </html>

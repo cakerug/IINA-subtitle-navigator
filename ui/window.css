@@ -352,7 +352,9 @@ mark.active {
     right: 0;
     top: calc(100% + 8px);
     z-index: 90;
-    width: 300px;
+    width: 340px;
+    max-height: 70vh;
+    overflow-y: auto;
     padding: 9px 11px;
     border-radius: 8px;
     border: 1px solid rgba(127, 127, 127, 0.3);
@@ -377,6 +379,37 @@ mark.active {
     padding: 1px 5px;
     border-radius: 4px;
     background: rgba(127, 127, 127, 0.22);
+    white-space: nowrap;
+}
+
+.helpTip b {
+    display: block;
+    margin: 10px 0 4px;
+    opacity: 0.65;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.helpNote {
+    margin: 0 0 6px;
+}
+
+/* Key on the left, what it does on the right. The key column is sized to the widest
+   chord so the descriptions line up down the panel. */
+.helpKeys {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 3px 8px;
+    margin: 0;
+}
+
+.helpKeys dt {
+    justify-self: start;
+}
+
+.helpKeys dd {
+    margin: 0;
 }
 
 .notice {
