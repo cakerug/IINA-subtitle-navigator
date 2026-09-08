@@ -1,0 +1,9 @@
+{
+  "name": "iina-subtitle-navigator",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Tests and dev tooling for the Subtitle Navigator IINA plugin. The plugin itself ships no dependencies and no build step.",
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  }
+}
