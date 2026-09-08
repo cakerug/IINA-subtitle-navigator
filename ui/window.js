@@ -674,6 +674,22 @@ function scrollRowIntoView(el) {
   }
 }
 
+// Resizing moves the current row off its resting place, and crossing
+// MIN_ROWS_TO_READ_AHEAD switches which resting place it should have, so put it
+// back once the drag settles. Waiting for the pause keeps the row from chasing the
+// pointer through every intermediate size.
+const RESIZE_SETTLE_MS = 150;
+let resizeScrollTimer = null;
+new ResizeObserver(() => {
+  clearTimeout(resizeScrollTimer);
+  resizeScrollTimer = setTimeout(() => {
+    if (editingId != null) return;
+    if (currentIdx !== -1 && document.getElementById("autoScrollToggle").checked) {
+      scrollToIndex(currentIdx);
+    }
+  }, RESIZE_SETTLE_MS);
+}).observe(document.getElementById("list"));
+
 /** Toolbar actions */
 function updateClearButton() {
   document.getElementById("clearSearch").hidden = !document.getElementById("q").value;
