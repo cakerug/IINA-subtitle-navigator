@@ -721,8 +721,24 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     closeContextMenu();
     // Editing has its own Escape handler (cancel); outside of that, Escape is a
-    // quick way back to wherever playback is.
-    if (editingId == null) iina.postMessage("scrollToCurrent", {});
+    // quick way back to wherever playback is. Pressed again once already there,
+    // it becomes a keyboard shortcut for the auto-scroll toggle instead of a no-op.
+    if (editingId == null) {
+      const toggle = document.getElementById("autoScrollToggle");
+      if (focusedPos() === currentIdx && currentIdx !== -1) {
+        const on = !toggle.checked;
+        toggle.checked = on;
+        if (on) {
+          followCurrent = true;
+          iina.postMessage("scrollToCurrent", {});
+        } else {
+          followCurrent = false;
+        }
+        showNotice(on ? "Auto-scroll on" : "Auto-scroll off");
+      } else {
+        iina.postMessage("scrollToCurrent", {});
+      }
+    }
   }
   // Inside a text field these belong to the field itself, not list navigation.
   const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || "");
