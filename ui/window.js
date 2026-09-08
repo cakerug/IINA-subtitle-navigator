@@ -747,32 +747,27 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     if (e.shiftKey) redo(); else undo();
   }
-  // Edit the line that is playing right now, without reaching for the mouse.
-  if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && currentIdx >= 0) {
-    e.preventDefault();
-    const r = filtered[currentIdx];
-    if (r) startEdit(r.id);
-  }
-
   if (!inField && editingId == null && !e.metaKey && !e.ctrlKey && !e.altKey) {
     if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); moveFocus(1); }
     else if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); moveFocus(-1); }
-    else if (e.key === "Enter") {
-      const pos = focusedPos();
-      const r = filtered[pos];
-      if (r) {
-        e.preventDefault();
-        if (e.shiftKey) {
-          startEdit(r.id);
-        } else {
-          // Enter jumps playback here too, so following picks back up from this line.
-          followCurrent = true;
-          selectPos(pos);
-          iina.postMessage("seekTo", { time: r.start });
-          if (loopingId != null) {
-            loopingId = r.id;
-            iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
-          }
+  }
+  if (!inField && editingId == null && !e.altKey && e.key === "Enter") {
+    const pos = focusedPos();
+    const r = filtered[pos];
+    if (r) {
+      e.preventDefault();
+      // Cmd/Ctrl+Enter edits the focused line, which falls back to the current one
+      // when nothing else is focused.
+      if (e.metaKey || e.ctrlKey) {
+        startEdit(r.id);
+      } else {
+        // Enter jumps playback here too, so following picks back up from this line.
+        followCurrent = true;
+        selectPos(pos);
+        iina.postMessage("seekTo", { time: r.start });
+        if (loopingId != null) {
+          loopingId = r.id;
+          iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
         }
       }
     }
