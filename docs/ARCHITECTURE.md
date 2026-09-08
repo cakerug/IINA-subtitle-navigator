@@ -1,6 +1,8 @@
 # Subtitle Navigator — architecture notes
 
-Recon notes taken before adding subtitle editing.
+How the plugin is put together, and why the awkward parts are the shape they are.
+Most of it is IINA and mpv constraints; the rest is invariants the save path depends
+on. `npm test` enforces the ones that are enforceable.
 
 ## Two contexts, one message bus
 
@@ -8,6 +10,7 @@ Recon notes taken before adding subtitle editing.
 | --- | --- | --- |
 | Plugin main | `main.js` | `iina.{core, standaloneWindow, event, mpv, file, utils, console, menu}` |
 | WebView UI | `ui/window.js` (+ `window.html`, `window.css`) | `iina.{postMessage, onMessage}` only |
+| UI rules | `ui/state.js`, `ui/shortcuts.js` | none — no DOM, no `iina` |
 
 All traffic goes over `standaloneWindow.postMessage` / `onMessage` (main → UI) and
 `iina.postMessage` / `standaloneWindow.onMessage` (UI → main). The UI has no
@@ -24,13 +27,83 @@ filesystem or mpv access; every privileged action is a message.
 3. `parseSRT(text)` — hand-rolled line scanner.
 4. `rows` — what the UI renders. Times are **seconds as numbers**, not SRT strings.
 
-Playback correlation lives entirely in the UI's `findCurrentIndex()`, which matches
+Playback correlation lives entirely in the UI's `Nav.findRowAtTime()`, which matches
 a time against `filtered` by containment (`start <= t <= end`), falling back to the
 last row that already ended when the time lands in a gap. Main sends only times,
 never row indices: indices in the UI are into `filtered`, which a search can narrow
 and which main cannot see. Main subtracts `mpv.getNumber("sub-delay")` from every
 time it sends, so the UI works in subtitle-file time throughout, and `seekTo` adds
 the delay back on the way out.
+
+## Why the UI is split three ways
+
+`ui/window.js` used to hold the navigation rules, the key bindings and the DOM in one
+file, which meant none of it could be exercised without a browser. Two modules were
+lifted out. Both are plain scripts that define one global for the WebView and export
+it via a `typeof module` guard for Node, so there is no bundler and no ES-module
+loading over `file://` to worry about.
+
+### `ui/state.js` — `Nav`
+
+Owns where playback is (`currentIdx`), what is selected, what auto-scroll has already
+brought into view (`lastScrolledIdx`), whether the selection is riding the current
+line (`followCurrent`), and where the keyboard is (`focusPos`). It holds no DOM.
+
+Every entry point takes the state plus whatever the DOM layer had to *measure*, and
+returns an **effects** object — `{ render, scrollTo, seekTo, scrollToCurrent,
+autoScroll, notice }` — which `apply()` in `window.js` turns into DOM. So the rules
+are ordinary functions over ordinary values, and `window.js` is left doing nothing but
+wiring.
+
+Three cases this shape exists to make testable, each a bug that had shipped:
+
+- **`lastScrolledIdx` is tracked apart from `currentIdx`.** Resolving `currentIdx`
+  from the clock does not scroll anything, so on load `currentIdx` could already name
+  the playing row with the list still parked at the top — and a tick gated on the
+  index *changing* would never scroll. Auto-scroll therefore compares against the row
+  it actually scrolled to, not against the previous index.
+- **`focusPos` is `null` until the user picks a row**, rather than falling back to
+  `currentIdx` in storage. `Nav.focusedPos()` still falls back for *movement*, but
+  "never moved" and "deliberately parked on the current line" stay distinguishable.
+- **Escape asks whether the current row is on screen**, which the DOM layer measures
+  and passes in. Asking instead whether focus *equalled* `currentIdx` read a
+  never-moved focus as being already on the current line, so the very first Escape
+  toggled auto-scroll instead of scrolling.
+
+### `ui/shortcuts.js` — `Shortcuts`
+
+One table of every key binding. Each entry carries both how it is matched
+(`match(event)`) and how it is displayed (`display`, `label`), plus the `context` it
+applies in — `list`, `editing` or `find`.
+
+The context is what fixes a second shipped bug: `Escape` was handled before the
+"is focus in a text field" check, so pressing it in the search or replace box also
+toggled auto-scroll. There is now a single `keydown` listener that resolves the
+context once and dispatches through the table.
+
+The table also *generates* the `?` panel (`renderHelp()`) and the context menu's key
+hints (`Shortcuts.display(action)`). Adding a binding anywhere else would mean it
+never appears under `?`, so `test/shortcuts.test.js` fails the build on any bare
+`e.key` comparison left in `window.js`, and on any action id without a handler.
+
+## Testing
+
+`npm test` is `node --test` over `test/`, with no dependencies.
+
+`test/helpers/plugin-harness.js` runs the real `main.js` in a `vm` context against a
+fake `iina` global, and drives it the way IINA does — by delivering messages and mpv
+events, and reading back what it posts, what it asks the shell to do, and what it
+stages for writing. `main.js` is a plugin script with no exports and self-registering
+handlers, so testing it through those seams is both the only option and the honest
+one: the assertions are about the real message contract, not about internals.
+
+The fake shell is deliberately not a shell. Commands are recorded and answered as
+successes; a test that wants a failure matches the command shape and returns a
+non-zero status, and one that wants a save held open returns a promise. What gets
+asserted is the text staged in `@tmp/`, which is exactly the `.srt` that would land.
+
+`ui/state.js` and `ui/shortcuts.js` are required directly, since they are DOM-free by
+construction.
 
 ## Constraints that shape the edit feature
 
@@ -61,11 +134,20 @@ text, so editing a cue that had `{...}` tags drops them from that cue only.
 
 There is no dirty state in the UI. An edit updates the list immediately and arms a
 ~2s timer, reset by each further edit, so a correction pass costs one write and one
-`sub-reload` instead of one per line. There is no manual save at all; a save
-arriving while one is in flight is queued rather than run concurrently. Anything
-that swaps
-the loaded file out — track switch, Reload, a new video, closing the window —
-flushes a pending edit first, so the debounce window cannot swallow one.
+`sub-reload` instead of one per line. There is no manual save at all.
+
+Saves are **chained** rather than flagged: `saveSubtitle()` appends to `saveChain`, so
+awaiting it waits for its own turn to finish and not merely for the queue to be
+joined. `flushPending()` depends on that — anything that swaps the loaded file out
+(track switch, Reload, a new video, closing the window) has to know the write is done
+before `refresh()` clears `edits` for the new path.
+
+Each write snapshots the edits it covers into a `batch`, and afterwards clears only
+those entries. An edit committed while the write was in flight is not in the text
+going out, so clearing `edits` wholesale would drop it silently and re-render the row
+back to the old text. Whatever remains after a batch gets a batch of its own.
+`flushPending()` makes two passes for the same reason: `edits` can be empty at the
+moment it is called and non-empty once the running save finishes.
 
 Because nothing signals "unsaved", the list must never show text the file does not
 have. A failed write therefore discards the whole batch and re-posts the rows,
@@ -95,6 +177,17 @@ failed rename falls back to writing in place.
 `parseSRT` normalizes `\r` away before splitting. Saving re-joins with `\n`, so a
 CRLF file becomes LF on first save. Acceptable; mpv reads both.
 
+### A loop belongs to the file it was set on
+
+Row ids are cue *indices*, so id 42 exists in almost any subtitle file. Left alone, a
+running line loop would survive into the next video and keep seeking to the old file's
+timestamps, under a marker sitting on an unrelated row. `clearLoop()` therefore runs
+wherever the loaded file changes, on both sides: `refresh()` drops the bounds when the
+path changes, and `setRows` drops `loopingId` when the path changes.
+
+Closing the window also clears it and stops the 250ms ticker. The window is the loop's
+only control, so leaving it running would strand playback on a line with no way out.
+
 ### `sub-reload` may renumber tracks
 
 mpv's `sub-reload` unloads and re-adds the track, so the track id can change.
@@ -121,9 +214,9 @@ empty a cue is dropped rather than sent, since `main.js` rejects blank text — 
 must never show text the file will not have — and the notice says how many lines were
 left alone.
 
-Three cursors move independently: `currentIdx` is where the video is (the blue row),
-`selected` is what was clicked, and `matchIdx` is the find cursor. Clicking a row
-moves the find cursor onto it, so Replace acts on the line being pointed at.
+Three cursors move independently: `nav.currentIdx` is where the video is (the blue
+row), `nav.selected` is what was clicked, and `matchIdx` is the find cursor. Clicking
+a row moves the find cursor onto it, so Replace acts on the line being pointed at.
 Playback deliberately does not: the find cursor is an editing position, and letting
 it drift with the video would make Replace a moving target. Following playback is
 what Auto-scroll and Scroll to Current are for.
@@ -153,8 +246,8 @@ across saves. Loading a different `.srt` does invalidate them, so `setRows` comp
 Undo is a session-level history of actions; the `.srt.bak` backup is still the
 separate, coarser escape hatch that holds the file as it was before the first write.
 
-`⌘Z` is ignored while focus is in a text field, so the search box, the replace box and
-an open editor keep their own native undo.
+`⌘Z` is bound in the `list` context only, so the search box, the replace box and an
+open editor keep their own native undo.
 
 ## Message inventory
 

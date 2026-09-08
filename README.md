@@ -40,9 +40,14 @@ Like the original, this is provided **as-is** with no promise of maintenance.
 
 ### Navigation
 - **Clickable subtitle list** — click a line to jump there
+- **Keyboard navigation** — `J`/`K` or `↑`/`↓` move through the list, `Enter` jumps
+  playback to the focused line. Browsing this way turns auto-scroll off, so the list
+  stays where you put it
 - **Scroll to current subtitle** (auto-scroll is on by default, and follows playback); loading or resuming a file jumps straight to the current line
-- `Escape` (outside editing) scrolls to the current line; press it again to toggle auto-scroll
-- `Space` (outside editing) plays or pauses
+- `Escape` scrolls to the playing line; press it again, with that line already on
+  screen, to toggle auto-scroll
+- `Space` plays or pauses
+- **Every shortcut is listed under `?`** in the toolbar
 - **Loop a line** from the right-click menu, until you stop it there
 - **Search subtitles**, with an `Aa` match-case toggle and match highlighting
 - **Replace** one match at a time, or **All** at once
@@ -113,6 +118,19 @@ The release workflow runs this same script, so a local build matches a released 
 
 Reload the plugin in IINA to pick up edits. No rebuild or reinstall.
 
+### Test
+
+```bash
+npm test
+```
+
+No dependencies and no install step — it is `node --test` over `test/`, and it runs
+in CI before a release is cut. The suite drives the real `main.js` inside a fake IINA
+(`test/helpers/plugin-harness.js`) rather than a copy of it, and covers the SRT parse
+and splice-on-save path, the save/reload races, and the list's navigation rules.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for how the UI is split to make that
+possible.
+
 ---
 
 ## 🚀 Usage
@@ -143,6 +161,8 @@ If you close it:
   file rather than the previous save
 - The undo history is per session and per file: closing the window or switching
   subtitle track clears it
+- A line loop belongs to the file it was set on, and stops when you load another one
+- Closing the window stops looping, since the window is its only control
 - The language-learning features inherited from the original are untested here
 
 ---
