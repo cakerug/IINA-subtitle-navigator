@@ -795,7 +795,11 @@ iina.onMessage("setRows", ({ rows: r, meta }) => {
   rows = Array.isArray(r) ? r : [];
 
   const path = meta?.path ?? null;
-  if (path !== loadedPath) { loadedPath = path; clearUndo(); }
+  // A fresh file (including the first load) may start mid-playback, e.g. IINA
+  // resuming a video, so jump to wherever the video already is instead of leaving
+  // the list parked at the top until the next playback tick happens to move it.
+  const isNewFile = path !== loadedPath;
+  if (isNewFile) { loadedPath = path; clearUndo(); }
 
   const liveIds = new Set(rows.map(x => x.id));
   for (const id of [...selected]) if (!liveIds.has(id)) selected.delete(id);
@@ -814,6 +818,10 @@ iina.onMessage("setRows", ({ rows: r, meta }) => {
   document.querySelector(".statusRow").hidden = !count;
 
   applyFilter();
+
+  if (isNewFile && rows.length && document.getElementById("autoScrollToggle").checked) {
+    iina.postMessage("scrollToCurrent", {});
+  }
 });
 
 iina.onMessage("time", ({ t }) => {
