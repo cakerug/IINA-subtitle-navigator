@@ -27,7 +27,7 @@
     </button>
     <div class="findRows">
       <div class="findRow">
-        <div class="searchWrap">
+        <div class="fieldWrap">
           <input id="q" placeholder="Search..." />
           <button id="clearSearch" class="clearBtn" title="Clear search" hidden>&times;</button>
         </div>
@@ -37,7 +37,10 @@
         <button id="nextMatch" class="iconBtn" title="Next match (Enter)" disabled>&#8595;</button>
       </div>
       <div class="findRow" id="replaceRow" hidden>
-        <input id="replaceWith" placeholder="Replace with..." />
+        <div class="fieldWrap">
+          <input id="replaceWith" placeholder="Replace with..." />
+          <button id="clearReplace" class="clearBtn" title="Clear replace" hidden>&times;</button>
+        </div>
         <button id="replaceOne" title="Replace this match (Enter)" disabled>Replace</button>
         <button id="replaceAll" title="Replace every match" disabled>All</button>
       </div>

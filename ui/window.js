@@ -715,18 +715,25 @@ function renderHelp() {
 
 /** Toolbar */
 
-function updateClearButton() {
-  $("clearSearch").hidden = !$("q").value;
+function updateClearButton(inputId, buttonId) {
+  $(buttonId).hidden = !$(inputId).value;
 }
 
-$("q").addEventListener("input", () => { updateClearButton(); applyFilter(); });
+function wireClearButton(inputId, buttonId, onChange = () => {}) {
+  $(inputId).addEventListener("input", () => {
+    updateClearButton(inputId, buttonId);
+    onChange();
+  });
+  $(buttonId).addEventListener("click", () => {
+    $(inputId).value = "";
+    updateClearButton(inputId, buttonId);
+    onChange();
+    $(inputId).focus();
+  });
+}
 
-$("clearSearch").addEventListener("click", () => {
-  $("q").value = "";
-  updateClearButton();
-  applyFilter();
-  $("q").focus();
-});
+wireClearButton("q", "clearSearch", applyFilter);
+wireClearButton("replaceWith", "clearReplace");
 
 function setReplaceOpen(open) {
   $("replaceRow").hidden = !open;

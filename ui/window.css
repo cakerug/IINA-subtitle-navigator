@@ -109,14 +109,14 @@ body {
     min-width: 0;
 }
 
-.searchWrap {
+.fieldWrap {
     position: relative;
     flex: 1;
     min-width: 0;
     display: flex;
 }
 
-.searchWrap input {
+.fieldWrap input {
     padding-right: 24px;
 }
 
