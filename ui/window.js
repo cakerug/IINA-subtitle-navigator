@@ -765,6 +765,15 @@ document.addEventListener("keydown", (e) => {
   // Inside a text field these belong to the field itself, not list navigation.
   const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || "");
 
+  // Space on a focused button is that button's own activation key.
+  const onButton = e.target?.tagName === "BUTTON";
+
+  if (!inField && !onButton && editingId == null && e.key === " "
+      && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault();
+    iina.postMessage("togglePause", {});
+  }
+
   if (!inField && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
     if (e.shiftKey) redo(); else undo();

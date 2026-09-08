@@ -455,6 +455,14 @@ standaloneWindow.onMessage("scrollToCurrent", () => {
   post("scrollToIndex", { idx });
 });
 
+standaloneWindow.onMessage("togglePause", () => {
+  // Read through mpv rather than core.status so the OSD matches the state we set,
+  // even if IINA's cached status lags behind.
+  const paused = mpv.getFlag("pause");
+  if (paused) { core.resume(); core.osd("Play"); }
+  else { core.pause(); core.osd("Pause"); }
+});
+
 standaloneWindow.onMessage("loopLine", (data) => {
   const enabled = Boolean(data?.enabled);
   const start = Number(data?.start);
