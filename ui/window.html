@@ -29,7 +29,10 @@
     </button>
     <div class="findRows">
       <div class="findRow">
-        <input id="q" placeholder="Search..." />
+        <div class="searchWrap">
+          <input id="q" placeholder="Search..." />
+          <button id="clearSearch" class="clearBtn" title="Clear search" hidden>&times;</button>
+        </div>
         <button id="caseToggle" class="toggleBtn" title="Match case" aria-pressed="false">Aa</button>
         <span id="matchCount" class="findCount"></span>
         <button id="prevMatch" class="iconBtn" title="Previous match (Shift+Enter)" disabled>&#8593;</button>
