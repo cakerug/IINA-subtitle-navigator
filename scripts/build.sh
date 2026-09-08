@@ -20,7 +20,7 @@ cp "$ROOT/Info.json" "$ROOT/main.js" "$STAGE/"
 cp -R "$ROOT/ui" "$STAGE/"
 
 node --check "$STAGE/main.js"
-node --check "$STAGE/ui/window.js"
+for f in "$STAGE"/ui/*.js; do node --check "$f"; done
 
 # zip merges into an existing archive, so a stale build would survive a rename.
 rm -f "$OUT"

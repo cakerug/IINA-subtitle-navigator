@@ -20,7 +20,7 @@ if [ "${1:-}" = "--unlink" ]; then
 fi
 
 node --check "$ROOT/main.js"
-node --check "$ROOT/ui/window.js"
+for f in "$ROOT"/ui/*.js; do node --check "$f"; done
 
 "$IINA_PLUGIN" link "$ROOT"
 echo "IINA now loads from $ROOT"
