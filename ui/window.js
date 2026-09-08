@@ -266,7 +266,7 @@ function openContextMenu(x, y, r) {
     el.appendChild(d);
   };
 
-  add("Edit text", "⇧⏎", () => startEdit(r.id));
+  add("Edit text", "⌘⏎", () => startEdit(r.id));
   sep();
   add("Jump to this line", "⏎", () => iina.postMessage("seekTo", { time: r.start }));
   if (loopingId === r.id) {
