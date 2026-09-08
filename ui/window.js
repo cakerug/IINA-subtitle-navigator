@@ -12,6 +12,11 @@ let loopingId = null;
 
 let currentTime = 0;
 let currentIdx = -1;
+// Keeps the selection riding the current line as playback advances. Armed by
+// anything that jumps playback to a line (Scroll to Current, auto-scroll turning on,
+// a plain click, Enter) and disarmed by browsing without seeking (j/k/arrows,
+// multi-select clicks).
+let followCurrent = false;
 
 let editingId = null;
 
@@ -153,6 +158,30 @@ function findCurrentIndex() {
   return best;
 }
 
+// Where j/k and the arrow keys act. Falls back to the currently playing row so
+// the first press moves from wherever playback is, not from the top of the list.
+function focusedPos() {
+  if (lastClickedPos != null && filtered[lastClickedPos]) return lastClickedPos;
+  return currentIdx >= 0 ? currentIdx : (filtered.length ? 0 : -1);
+}
+
+function selectPos(pos) {
+  const r = filtered[pos];
+  if (!r) return;
+  selected.clear();
+  selected.add(r.id);
+  lastClickedPos = pos;
+  render();
+}
+
+function moveFocus(delta) {
+  if (!filtered.length) return;
+  followCurrent = false;
+  const pos = Math.max(0, Math.min(filtered.length - 1, Math.max(focusedPos(), 0) + delta));
+  selectPos(pos);
+  scrollToIndex(pos);
+}
+
 function commitEdit(ta, id) {
   if (ta.dataset.done) return false;
   const value = ta.value;
@@ -215,9 +244,9 @@ function openContextMenu(x, y, r) {
     el.appendChild(d);
   };
 
-  add("Edit text", "⌘⏎", () => startEdit(r.id));
+  add("Edit text", "⇧⏎", () => startEdit(r.id));
   sep();
-  add("Jump to this line", "", () => iina.postMessage("seekTo", { time: r.start }));
+  add("Jump to this line", "⏎", () => iina.postMessage("seekTo", { time: r.start }));
   if (loopingId === r.id) {
     add("Stop looping", "", () => {
       loopingId = null;
@@ -375,14 +404,18 @@ function render() {
       const isToggle = e.metaKey || e.ctrlKey;
 
       if (isRange) {
+        followCurrent = false;
         const a = Math.min(lastClickedPos, pos);
         const b = Math.max(lastClickedPos, pos);
         selected.clear();
         for (let k = a; k <= b; k++) if (filtered[k]) selected.add(filtered[k].id);
       } else if (isToggle) {
+        followCurrent = false;
         if (selected.has(r.id)) selected.delete(r.id); else selected.add(r.id);
         lastClickedPos = pos;
       } else {
+        // A plain click jumps playback here, so following picks back up from this line.
+        followCurrent = true;
         selected.clear();
         selected.add(r.id);
         lastClickedPos = pos;
@@ -654,8 +687,11 @@ document.getElementById("track").addEventListener("change", () => {
 
 document.getElementById("autoScrollToggle").addEventListener("change", () => {
   const on = document.getElementById("autoScrollToggle").checked;
+  // Turning auto-scroll on jumps to the current line, same as the button below.
   if (on && currentIdx >= 0) {
-    scrollToIndex(currentIdx);
+    iina.postMessage("scrollToCurrent", {});
+  } else {
+    followCurrent = false;
   }
 });
 
@@ -670,10 +706,16 @@ window.addEventListener("blur", closeContextMenu);
 document.addEventListener("contextmenu", (e) => { e.preventDefault(); closeContextMenu(); });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") closeContextMenu();
-  // Inside a text field ⌘Z belongs to the field's own undo, not the edit history.
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z"
-      && !/^(INPUT|TEXTAREA)$/.test(e.target?.tagName || "")) {
+  if (e.key === "Escape") {
+    closeContextMenu();
+    // Editing has its own Escape handler (cancel); outside of that, Escape is a
+    // quick way back to wherever playback is.
+    if (editingId == null) iina.postMessage("scrollToCurrent", {});
+  }
+  // Inside a text field these belong to the field itself, not list navigation.
+  const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || "");
+
+  if (!inField && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
     if (e.shiftKey) redo(); else undo();
   }
@@ -682,6 +724,30 @@ document.addEventListener("keydown", (e) => {
     e.preventDefault();
     const r = filtered[currentIdx];
     if (r) startEdit(r.id);
+  }
+
+  if (!inField && editingId == null && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); moveFocus(1); }
+    else if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); moveFocus(-1); }
+    else if (e.key === "Enter") {
+      const pos = focusedPos();
+      const r = filtered[pos];
+      if (r) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          startEdit(r.id);
+        } else {
+          // Enter jumps playback here too, so following picks back up from this line.
+          followCurrent = true;
+          selectPos(pos);
+          iina.postMessage("seekTo", { time: r.start });
+          if (loopingId != null) {
+            loopingId = r.id;
+            iina.postMessage("loopLine", { enabled: true, start: r.start, end: r.end });
+          }
+        }
+      }
+    }
   }
 });
 
@@ -726,7 +792,9 @@ iina.onMessage("time", ({ t }) => {
     const idx = findCurrentIndex();
 
     if (idx !== currentIdx) {
-      render();
+      // Following keeps the selection on the current line as it advances; selectPos
+      // already re-renders, so a plain render() would just redo that work.
+      if (followCurrent && idx !== -1) selectPos(idx); else render();
       const autoScroll = document.getElementById("autoScrollToggle")?.checked;
       if (autoScroll && idx !== -1) {
         scrollToIndex(idx);
@@ -735,8 +803,14 @@ iina.onMessage("time", ({ t }) => {
   }
 });
 
+// The only sender of this message is "Scroll to Current" (directly, or via auto-scroll
+// switching on). Landing here selects the row and arms follow mode, so the selection
+// keeps riding the current line as playback advances until a manual nav breaks it.
 iina.onMessage("scrollToIndex", ({ idx }) => {
-  if (typeof idx === "number") scrollToIndex(idx);
+  if (typeof idx !== "number") return;
+  followCurrent = true;
+  selectPos(idx);
+  scrollToIndex(idx);
 });
 
 iina.onMessage("notice", (data) => {
