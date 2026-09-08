@@ -185,9 +185,25 @@ function disableAutoScroll() {
   }
 }
 
+// Tracked so a mousemove the pointer did not actually cause can be ignored:
+// scrolling rows under a resting cursor fires one on its own, which would drop
+// keyboard mode on the very keypress that scrolled the list.
+let lastMouse = { x: -1, y: -1 };
+
+function setKeyboardNav(on) {
+  document.getElementById("list").classList.toggle("kbdNav", on);
+}
+
+document.addEventListener("mousemove", (e) => {
+  if (e.clientX === lastMouse.x && e.clientY === lastMouse.y) return;
+  lastMouse = { x: e.clientX, y: e.clientY };
+  setKeyboardNav(false);
+});
+
 function moveFocus(delta) {
   if (!filtered.length) return;
   followCurrent = false;
+  setKeyboardNav(true);
   disableAutoScroll();
   const pos = Math.max(0, Math.min(filtered.length - 1, Math.max(focusedPos(), 0) + delta));
   selectPos(pos);
@@ -794,6 +810,7 @@ document.addEventListener("keydown", (e) => {
       } else {
         // Enter jumps playback here too, so following picks back up from this line.
         followCurrent = true;
+        setKeyboardNav(true);
         selectPos(pos);
         iina.postMessage("seekTo", { time: r.start });
         if (loopingId != null) {
