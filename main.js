@@ -23,15 +23,24 @@ let backedUp = false;
 
 const AUTOSAVE_DELAY_MS = 2000;
 let autosaveTimer = null;
-let saving = false;
-let saveQueued = false;
+// Saves run one at a time, chained rather than flagged, so awaiting saveSubtitle()
+// waits for its own turn to finish and not just for the queue to be joined.
+let saveChain = Promise.resolve();
 // Our own sub-reload makes mpv re-announce the track list; re-reading the file in
 // response would undo the in-memory resync and re-render over an open editor.
 let selfReloadAt = 0;
 
 let lastStateKey = "";
 let timeTicker = null;
+// Playback-time bounds of the line being looped. Belongs to whichever .srt is
+// loaded, so anything that swaps the file out has to drop it -- row ids are cue
+// indices, so a stale loop would otherwise keep seeking to the old file's times
+// under a marker sitting on an unrelated row of the new one.
 let loop = { enabled: false, start: 0, end: 0 };
+
+function clearLoop() {
+  loop = { enabled: false, start: 0, end: 0 };
+}
 
 let windowLoaded = false;
 
@@ -215,8 +224,10 @@ async function refresh(force = false) {
 
   post("setTracks", { tracks: allSubTracks, trackId });
 
-  if (!trackId) {
+  // `!trackId` rather than a null check would treat a track id of 0 as no track.
+  if (trackId === null) {
     cues = []; rows = []; srcLines = []; srcPath = "";
+    clearLoop();
     post("setRows", { rows: [], meta: { error: "No subtitle selected" } });
     return;
   }
@@ -233,6 +244,7 @@ async function refresh(force = false) {
     edits.clear();
     editsKey = path;
     backedUp = false;
+    clearLoop();
   }
 
   try {
@@ -257,13 +269,13 @@ function isBlank(text) {
 
 // Splices edited text into the original source lines. Cues are applied back to
 // front so earlier splices don't shift the spans of ones not yet applied.
-function buildSRT() {
+function buildSRT(batch) {
   const out = srcLines.slice();
-  const ids = [...edits.keys()].sort((a, b) => cues[b].textStart - cues[a].textStart);
+  const ids = [...batch.keys()].sort((a, b) => cues[b].textStart - cues[a].textStart);
   for (const id of ids) {
     const c = cues[id];
     if (!c) continue;
-    const replacement = String(edits.get(id)).replace(/\r/g, "").split("\n");
+    const replacement = String(batch.get(id)).replace(/\r/g, "").split("\n");
     out.splice(c.textStart, c.textEnd - c.textStart, ...replacement);
   }
   let text = out.join("\n");
@@ -290,9 +302,12 @@ function cancelAutosave() {
 
 // Anything that swaps the loaded file out has to write a pending edit first,
 // otherwise an edit made inside the debounce window disappears silently.
+// Two passes because an edit can arrive after a running save has snapshotted its
+// batch: `edits` can be empty right now and non-empty once that save finishes.
 async function flushPending() {
-  if (!edits.size) { cancelAutosave(); return; }
+  cancelAutosave();
   await saveSubtitle({ auto: true });
+  if (edits.size) await saveSubtitle({ auto: true });
 }
 
 // Batches a run of edits into one write and one subtitle reload, instead of paying
@@ -320,7 +335,10 @@ async function writeSubtitleFile(path, text) {
     `mv -f ${shQuote(swap)} ${shQuote(path)}`,
   ].join(" && ");
   const res = await utils.exec("/bin/bash", ["-lc", `${cmd} || { rm -f ${shQuote(swap)}; exit 1; }`]);
-  if (!res || !Number.isFinite(res.status) || res.status === 0) return;
+  // A result we cannot read is treated as a failure: falling through to the in-place
+  // write costs one extra `cat` if it actually succeeded, whereas assuming success
+  // would report a save that may never have happened.
+  if (res && res.status === 0) return;
 
   // The rename needs a writable *directory*; the subtitle may sit in a read-only one
   // beside a writable file (a mounted share, say). Fall back to writing in place,
@@ -329,15 +347,19 @@ async function writeSubtitleFile(path, text) {
   if (direct && Number.isFinite(direct.status) && direct.status !== 0) {
     throw new Error(`Write failed: ${direct.stderr || res.stderr || `exit ${direct.status}`}`);
   }
-  log.error(`Atomic replace unavailable for ${path}; wrote in place instead.`);
+  log.log(`Atomic replace unavailable for ${path}; wrote in place instead.`);
 }
 
-async function saveSubtitle(opts = {}) {
-  const auto = Boolean(opts.auto);
+function saveSubtitle(opts = {}) {
   cancelAutosave();
+  // A save with nothing left to write is a no-op, so a redundant queue entry costs
+  // nothing and the caller still gets a promise that outlives the write ahead of it.
+  saveChain = saveChain.then(() => runSave(opts), () => runSave(opts));
+  return saveChain;
+}
 
-  // Never let two writes overlap; the second runs once the first settles.
-  if (saving) { saveQueued = true; return; }
+async function runSave(opts = {}) {
+  const auto = Boolean(opts.auto);
 
   if (!edits.size) {
     if (!auto) post("saveResult", { ok: true, saved: 0, message: "No changes to save" });
@@ -349,8 +371,10 @@ async function saveSubtitle(opts = {}) {
     return;
   }
 
-  const count = edits.size;
-  saving = true;
+  // Snapshot what this write covers. An edit committed while the write is in flight
+  // is not in the text going out, so it must not be cleared along with the batch.
+  const batch = new Map(edits);
+  const count = batch.size;
   try {
     const check = await utils.exec("/bin/bash", ["-lc", `test -w ${shQuote(path)}`]);
     if (check && Number.isFinite(check.status) && check.status !== 0) {
@@ -359,7 +383,7 @@ async function saveSubtitle(opts = {}) {
 
     await backupOnce(path);
 
-    const text = buildSRT();
+    const text = buildSRT(batch);
     await writeSubtitleFile(path, text);
 
     // Re-parse what we just wrote rather than reading it back. Line-count changes
@@ -368,7 +392,7 @@ async function saveSubtitle(opts = {}) {
     const parsed = parseSRT(text);
     cues = parsed.cues;
     srcLines = parsed.lines;
-    edits.clear();
+    clearBatch(batch);
 
     selfReloadAt = Date.now();
     try { mpv.command("sub-reload", [String(trackId)]); } catch (e) { log.error(fmtErr(e)); }
@@ -382,15 +406,25 @@ async function saveSubtitle(opts = {}) {
     // Nothing reached the file, so drop the batch rather than leave the list showing
     // text the .srt does not have. The discarded lines go into the error so a
     // correction that mattered can be typed back in.
-    const lost = [...edits.values()].join(" / ");
-    edits.clear();
+    const lost = [...batch.values()].join(" / ");
+    clearBatch(batch);
     postRows();
     core.osd("Subtitle save failed - edit reverted");
     post("saveResult", { ok: false, message: `Save failed, edit reverted: ${msg}`, discarded: lost, auto });
   } finally {
-    saving = false;
-    if (saveQueued) { saveQueued = false; scheduleAutosave(); }
+    // Whatever arrived mid-write is still pending, so give it its own batch.
+    if (edits.size) scheduleAutosave();
   }
+}
+
+// Drops only the entries this write covered, leaving any edit made while it was in
+// flight -- and any edit that has since replaced one of them -- pending.
+function clearBatch(batch) {
+  for (const [id, value] of batch) if (edits.get(id) === value) edits.delete(id);
+}
+
+function stopTicker() {
+  if (timeTicker) { clearInterval(timeTicker); timeTicker = null; }
 }
 
 function startTicker() {
@@ -411,6 +445,10 @@ function startTicker() {
 standaloneWindow.onMessage("windowClosed", () => {
   uiReady = false;
   windowLoaded = false;
+  // The window is the only control for looping, so leaving it running would strand
+  // playback on a line with no way to stop it.
+  clearLoop();
+  stopTicker();
   flushPending();
 });
 
@@ -459,7 +497,7 @@ standaloneWindow.onMessage("loopLine", (data) => {
     loop = { enabled: true, start: start + d, end: end + d };
     core.osd("Loop: ON");
   } else {
-    loop = { enabled: false, start: 0, end: 0 };
+    clearLoop();
     core.osd("Loop: OFF");
   }
 });
