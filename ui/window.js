@@ -194,6 +194,15 @@ function moveFocus(delta) {
   scrollToIndex(pos);
 }
 
+// applyChanges runs the edit through applyFilter, which clears lastClickedPos
+// since filtering can invalidate a stale position. Left alone, the next j/k or
+// arrow press would fall back to wherever playback is instead of continuing from
+// the line just edited.
+function focusRow(id) {
+  const pos = filtered.findIndex(r => r.id === id);
+  if (pos >= 0) selectPos(pos);
+}
+
 function commitEdit(ta, id) {
   if (ta.dataset.done) return false;
   const value = ta.value;
@@ -207,11 +216,12 @@ function commitEdit(ta, id) {
 
   const next = normalizeText(value);
   const row = rows.find(r => r.id === id);
-  if (!row || next === row.text) { render(); return true; }
+  if (!row || next === row.text) { render(); focusRow(id); return true; }
 
   const changes = [{ id, before: row.text, after: next }];
   pushUndo("the edit", changes);
   applyChanges(changes, "after");
+  focusRow(id);
   return true;
 }
 
