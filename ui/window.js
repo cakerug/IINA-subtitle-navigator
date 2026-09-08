@@ -649,7 +649,19 @@ function scrollRowIntoView(el) {
 }
 
 /** Toolbar actions */
-document.getElementById("q").addEventListener("input", applyFilter);
+function updateClearButton() {
+  document.getElementById("clearSearch").hidden = !document.getElementById("q").value;
+}
+
+document.getElementById("q").addEventListener("input", () => { updateClearButton(); applyFilter(); });
+
+document.getElementById("clearSearch").addEventListener("click", () => {
+  const q = document.getElementById("q");
+  q.value = "";
+  updateClearButton();
+  applyFilter();
+  q.focus();
+});
 
 function setReplaceOpen(open) {
   document.getElementById("replaceRow").hidden = !open;
