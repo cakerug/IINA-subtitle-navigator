@@ -509,8 +509,7 @@ function gotoMatch(delta) {
 }
 
 function scrollToMatch() {
-  const el = document.querySelector("mark.active");
-  if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+  scrollRowIntoView(document.querySelector("mark.active")?.closest(".item"));
 }
 
 function replacement() {
@@ -581,8 +580,27 @@ function replaceAll() {
 }
 
 function scrollToIndex(idx) {
-  const el = document.querySelector(`.item[data-index="${idx}"]`);
-  if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+  scrollRowIntoView(document.querySelector(`.item[data-index="${idx}"]`));
+}
+
+// Below this many visible rows there's not enough room to read ahead, so we fall
+// back to centering the target instead.
+const MIN_ROWS_TO_READ_AHEAD = 7;
+// Rows kept above the target when reading ahead, so it lands on the 4th row.
+const ROWS_ABOVE_TARGET = 3;
+
+// When enough rows fit on screen to read ahead, keeps the target on the fourth row
+// instead of centering it, so the upcoming lines stay in view below it.
+function scrollRowIntoView(el) {
+  if (!el) return;
+  const list = document.getElementById("list");
+  const rowHeight = el.getBoundingClientRect().height || 1;
+  if (list.clientHeight / rowHeight > MIN_ROWS_TO_READ_AHEAD) {
+    const offset = el.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    list.scrollTo({ top: Math.max(0, list.scrollTop + offset - rowHeight * ROWS_ABOVE_TARGET), behavior: "smooth" });
+  } else {
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
 }
 
 /** Toolbar actions */
