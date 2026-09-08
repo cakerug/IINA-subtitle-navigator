@@ -174,9 +174,21 @@ function selectPos(pos) {
   render();
 }
 
+// Browsing with j/k/arrows overrides auto-scroll the same way it breaks follow
+// mode, since otherwise the next playback tick would yank the list back to the
+// current line out from under the row the user just moved to.
+function disableAutoScroll() {
+  const toggle = document.getElementById("autoScrollToggle");
+  if (toggle && toggle.checked) {
+    toggle.checked = false;
+    showNotice("Auto-scroll off");
+  }
+}
+
 function moveFocus(delta) {
   if (!filtered.length) return;
   followCurrent = false;
+  disableAutoScroll();
   const pos = Math.max(0, Math.min(filtered.length - 1, Math.max(focusedPos(), 0) + delta));
   selectPos(pos);
   scrollToIndex(pos);
