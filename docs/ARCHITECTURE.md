@@ -24,8 +24,13 @@ filesystem or mpv access; every privileged action is a message.
 3. `parseSRT(text)` — hand-rolled line scanner.
 4. `rows` — what the UI renders. Times are **seconds as numbers**, not SRT strings.
 
-Playback correlation uses `closestRowIndexByTime()`, which subtracts
-`mpv.getNumber("sub-delay")` before searching, so every seek adds the delay back.
+Playback correlation lives entirely in the UI's `findCurrentIndex()`, which matches
+a time against `filtered` by containment (`start <= t <= end`), falling back to the
+last row that already ended when the time lands in a gap. Main sends only times,
+never row indices: indices in the UI are into `filtered`, which a search can narrow
+and which main cannot see. Main subtracts `mpv.getNumber("sub-delay")` from every
+time it sends, so the UI works in subtitle-file time throughout, and `seekTo` adds
+the delay back on the way out.
 
 ## Constraints that shape the edit feature
 
@@ -167,7 +172,7 @@ per row against current state rather than from a fixed list: the loop entry read
 selection when the right-clicked row is part of a multi-row one. With no toolbar
 control left, the row's own `.looping` marker is the only indication looping is on.
 
-Main → UI: `setTracks`, `setRows`, `time`, `scrollToIndex`
+Main → UI: `setTracks`, `setRows`, `time`, `scrollToTime`
 — plus, added for editing: `saveResult` (failures only), `notice`.
 
 `render()` carries an open editor's text, caret and focus across a rebuild. Without

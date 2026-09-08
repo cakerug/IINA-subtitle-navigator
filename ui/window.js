@@ -873,7 +873,14 @@ iina.onMessage("time", ({ t }) => {
     if (idx !== currentIdx) {
       // Following keeps the selection on the current line as it advances; selectPos
       // already re-renders, so a plain render() would just redo that work.
-      if (followCurrent && idx !== -1) selectPos(idx); else render();
+      if (followCurrent && idx !== -1) {
+        selectPos(idx);
+      } else {
+        // Playback sits before the first line, so there is no row to ride. Left
+        // alone, the outline would stay behind claiming to be the followed row.
+        if (followCurrent) { selected.clear(); lastClickedPos = null; }
+        render();
+      }
       const autoScroll = document.getElementById("autoScrollToggle")?.checked;
       if (autoScroll && idx !== -1) {
         scrollToIndex(idx);
@@ -885,8 +892,13 @@ iina.onMessage("time", ({ t }) => {
 // The only sender of this message is "Scroll to Current" (directly, or via auto-scroll
 // switching on). Landing here selects the row and arms follow mode, so the selection
 // keeps riding the current line as playback advances until a manual nav breaks it.
-iina.onMessage("scrollToIndex", ({ idx }) => {
-  if (typeof idx !== "number") return;
+// It carries a time rather than a row index because indices here are into the
+// filtered list, which the sender cannot see.
+iina.onMessage("scrollToTime", ({ t }) => {
+  if (typeof t !== "number" || !isFinite(t)) return;
+  currentTime = t;
+  const idx = findCurrentIndex();
+  if (idx === -1) return;
   followCurrent = true;
   selectPos(idx);
   scrollToIndex(idx);

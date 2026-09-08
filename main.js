@@ -200,22 +200,6 @@ function getSubDelay() {
   } catch (_) { return 0; }
 }
 
-function closestRowIndexByTime(t) {
-  const subDelay = getSubDelay();
-  const tAdj = t - subDelay;
-
-  if (!rows.length) return -1;
-  let lo = 0, hi = rows.length - 1;
-  while (lo <= hi) {
-    const mid = (lo + hi) >> 1;
-    if (rows[mid].start < tAdj) lo = mid + 1;
-    else hi = mid - 1;
-  }
-  if (lo <= 0) return 0;
-  if (lo >= rows.length) return rows.length - 1;
-  return (Math.abs(rows[lo].start - tAdj) < Math.abs(rows[lo-1].start - tAdj)) ? lo : (lo-1);
-}
-
 async function refresh(force = false) {
   allSubTracks = await buildTrackListSuffixOnly();
 
@@ -415,7 +399,9 @@ function startTicker() {
     try {
       const t = mpv.getNumber("time-pos");
       if (Number.isFinite(t)) {
-        post("time", { t });
+        // The UI matches this against times read from the subtitle file, so shift it
+        // out of playback time. Loop bounds below are already in playback time.
+        post("time", { t: t - getSubDelay() });
         if (loop.enabled && t > loop.end + 0.02) core.seekTo(loop.start);
       }
     } catch (_) {}
@@ -448,11 +434,12 @@ standaloneWindow.onMessage("seekTo", (data) => {
   if (Number.isFinite(t)) core.seekTo(t + getSubDelay());
 });
 
+// Read straight from mpv rather than letting the UI reuse its last ticked time,
+// which can be a tick behind on the jump that follows opening a file.
 standaloneWindow.onMessage("scrollToCurrent", () => {
   const t = mpv.getNumber("time-pos");
   if (!Number.isFinite(t)) return;
-  const idx = closestRowIndexByTime(t);
-  post("scrollToIndex", { idx });
+  post("scrollToTime", { t: t - getSubDelay() });
 });
 
 standaloneWindow.onMessage("togglePause", () => {
