@@ -12,6 +12,10 @@ let loopingId = null;
 
 let currentTime = 0;
 let currentIdx = -1;
+// The row auto-scroll last brought into view. Tracked apart from currentIdx because
+// every render() resyncs currentIdx to the clock, so on load currentIdx can already
+// name the playing row without anything having scrolled to it.
+let lastScrolledIdx = -1;
 // Keeps the selection riding the current line as playback advances. Armed by
 // anything that jumps playback to a line (Scroll to Current, auto-scroll turning on,
 // a plain click, Enter) and disarmed by browsing without seeking (j/k/arrows,
@@ -651,6 +655,7 @@ function replaceAll() {
 }
 
 function scrollToIndex(idx) {
+  lastScrolledIdx = idx;
   scrollRowIntoView(document.querySelector(`.item[data-index="${idx}"]`));
 }
 
@@ -853,7 +858,7 @@ iina.onMessage("setRows", ({ rows: r, meta }) => {
   // resuming a video, so jump to wherever the video already is instead of leaving
   // the list parked at the top until the next playback tick happens to move it.
   const isNewFile = path !== loadedPath;
-  if (isNewFile) { loadedPath = path; clearUndo(); }
+  if (isNewFile) { loadedPath = path; clearUndo(); lastScrolledIdx = -1; }
 
   const liveIds = new Set(rows.map(x => x.id));
   for (const id of [...selected]) if (!liveIds.has(id)) selected.delete(id);
@@ -897,10 +902,14 @@ iina.onMessage("time", ({ t }) => {
         if (followCurrent) { selected.clear(); lastClickedPos = null; }
         render();
       }
-      const autoScroll = document.getElementById("autoScrollToggle")?.checked;
-      if (autoScroll && idx !== -1) {
-        scrollToIndex(idx);
-      }
+    }
+
+    // Deliberately outside the block above: the row can become current without the
+    // index changing here, because a render() elsewhere already moved currentIdx
+    // onto it. Scrolling when it is not the row on screen catches those too.
+    const autoScroll = document.getElementById("autoScrollToggle")?.checked;
+    if (autoScroll && idx !== -1 && idx !== lastScrolledIdx) {
+      scrollToIndex(idx);
     }
   }
 });
