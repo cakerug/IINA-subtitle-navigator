@@ -42,6 +42,7 @@ Like the original, this is provided **as-is** with no promise of maintenance.
 - **Clickable subtitle list** — click a line to jump there
 - **Scroll to current subtitle** (auto-scroll is on by default, and follows playback); loading or resuming a file jumps straight to the current line
 - `Escape` (outside editing) scrolls to the current line; press it again to toggle auto-scroll
+- `Space` (outside editing) plays or pauses
 - **Loop a line** from the right-click menu, until you stop it there
 - **Search subtitles**, with an `Aa` match-case toggle and match highlighting
 - **Replace** one match at a time, or **All** at once

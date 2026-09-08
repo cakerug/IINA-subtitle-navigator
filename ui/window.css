@@ -252,6 +252,13 @@ button {
     background: rgba(127, 127, 127, 0.10);
 }
 
+/* Keyboard navigation suppresses hover: the pointer is usually left resting over
+   some unrelated row, and its highlight competes with the outline below for which
+   row looks focused. Real pointer movement brings it back. */
+.list.kbdNav .item:hover:not(.current) {
+    background: none;
+}
+
 /* Selected by click, as opposed to the row playing now. */
 .item.selected {
     outline: 2px solid rgba(127, 127, 127, 0.35);

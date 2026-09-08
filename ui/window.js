@@ -185,9 +185,25 @@ function disableAutoScroll() {
   }
 }
 
+// Tracked so a mousemove the pointer did not actually cause can be ignored:
+// scrolling rows under a resting cursor fires one on its own, which would drop
+// keyboard mode on the very keypress that scrolled the list.
+let lastMouse = { x: -1, y: -1 };
+
+function setKeyboardNav(on) {
+  document.getElementById("list").classList.toggle("kbdNav", on);
+}
+
+document.addEventListener("mousemove", (e) => {
+  if (e.clientX === lastMouse.x && e.clientY === lastMouse.y) return;
+  lastMouse = { x: e.clientX, y: e.clientY };
+  setKeyboardNav(false);
+});
+
 function moveFocus(delta) {
   if (!filtered.length) return;
   followCurrent = false;
+  setKeyboardNav(true);
   disableAutoScroll();
   const pos = Math.max(0, Math.min(filtered.length - 1, Math.max(focusedPos(), 0) + delta));
   selectPos(pos);
@@ -765,6 +781,15 @@ document.addEventListener("keydown", (e) => {
   // Inside a text field these belong to the field itself, not list navigation.
   const inField = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || "");
 
+  // Space on a focused button is that button's own activation key.
+  const onButton = e.target?.tagName === "BUTTON";
+
+  if (!inField && !onButton && editingId == null && e.key === " "
+      && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault();
+    iina.postMessage("togglePause", {});
+  }
+
   if (!inField && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
     e.preventDefault();
     if (e.shiftKey) redo(); else undo();
@@ -785,6 +810,7 @@ document.addEventListener("keydown", (e) => {
       } else {
         // Enter jumps playback here too, so following picks back up from this line.
         followCurrent = true;
+        setKeyboardNav(true);
         selectPos(pos);
         iina.postMessage("seekTo", { time: r.start });
         if (loopingId != null) {
@@ -847,7 +873,14 @@ iina.onMessage("time", ({ t }) => {
     if (idx !== currentIdx) {
       // Following keeps the selection on the current line as it advances; selectPos
       // already re-renders, so a plain render() would just redo that work.
-      if (followCurrent && idx !== -1) selectPos(idx); else render();
+      if (followCurrent && idx !== -1) {
+        selectPos(idx);
+      } else {
+        // Playback sits before the first line, so there is no row to ride. Left
+        // alone, the outline would stay behind claiming to be the followed row.
+        if (followCurrent) { selected.clear(); lastClickedPos = null; }
+        render();
+      }
       const autoScroll = document.getElementById("autoScrollToggle")?.checked;
       if (autoScroll && idx !== -1) {
         scrollToIndex(idx);
@@ -859,8 +892,13 @@ iina.onMessage("time", ({ t }) => {
 // The only sender of this message is "Scroll to Current" (directly, or via auto-scroll
 // switching on). Landing here selects the row and arms follow mode, so the selection
 // keeps riding the current line as playback advances until a manual nav breaks it.
-iina.onMessage("scrollToIndex", ({ idx }) => {
-  if (typeof idx !== "number") return;
+// It carries a time rather than a row index because indices here are into the
+// filtered list, which the sender cannot see.
+iina.onMessage("scrollToTime", ({ t }) => {
+  if (typeof t !== "number" || !isFinite(t)) return;
+  currentTime = t;
+  const idx = findCurrentIndex();
+  if (idx === -1) return;
   followCurrent = true;
   selectPos(idx);
   scrollToIndex(idx);
